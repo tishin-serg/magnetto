@@ -1,0 +1,172 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: torrentbot
+      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME}
+      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME} -d torrentbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    profiles:
+      - local-api
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+    command: ["--local", "--http-port=8081"]
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+    ports:
+      - "127.0.0.1:8081:8081"
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Moscow
+      WEBUI_PORT: 8080
+      QBT_WEBUI_USERNAME: ${QBITTORRENT_USERNAME}
+      QBT_WEBUI_PASSWORD: ${QBITTORRENT_PASSWORD}
+    volumes:
+      - qbittorrent-config:/config
+      - downloads:/downloads
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+
+  bot-app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qbittorrent:
+        condition: service_started
+    environment:
+      TZ: Europe/Moscow
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Europe/Moscow
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
+      TELEGRAM_BASE_URL: ${TELEGRAM_BASE_URL:-https://api.telegram.org}
+      QBITTORRENT_BASE_URL: http://qbittorrent:8080
+      QBITTORRENT_USERNAME: ${QBITTORRENT_USERNAME}
+      QBITTORRENT_PASSWORD: ${QBITTORRENT_PASSWORD}
+      QBITTORRENT_VPS_BASE_URL: http://qbittorrent:8080
+      QBITTORRENT_VPS_USERNAME: ${QBITTORRENT_USERNAME}
+      QBITTORRENT_VPS_PASSWORD: ${QBITTORRENT_PASSWORD}
+      QBITTORRENT_VPS_DOWNLOAD_PATH: /downloads
+      QBITTORRENT_HOME_BASE_URL: ${QBITTORRENT_HOME_BASE_URL:-http://100.64.0.1:8080}
+      QBITTORRENT_HOME_USERNAME: ${QBITTORRENT_HOME_USERNAME:-admin}
+      QBITTORRENT_HOME_PASSWORD: ${QBITTORRENT_HOME_PASSWORD:-adminadmin}
+      QBITTORRENT_HOME_DOWNLOAD_PATH: ${QBITTORRENT_HOME_DOWNLOAD_PATH:-/media/movies}
+      HOME_WEBDAV_ENABLED: ${HOME_WEBDAV_ENABLED:-false}
+      HOME_WEBDAV_BASE_URL: ${HOME_WEBDAV_BASE_URL:-http://100.64.0.1:8085/}
+      HOME_WEBDAV_LOCAL_BASE_URL: ${HOME_WEBDAV_LOCAL_BASE_URL:-}
+      HOME_WEBDAV_USERNAME: ${HOME_WEBDAV_USERNAME:-}
+      HOME_WEBDAV_PASSWORD: ${HOME_WEBDAV_PASSWORD:-}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      DOWNLOAD_PATH: /downloads
+      DOWNLOADS_STORAGE_PATH: /downloads
+      DOWNLOADS_PUBLIC_BASE_URL: ${DOWNLOADS_PUBLIC_BASE_URL:-http://localhost:8088}
+      DOWNLOADS_INTERNAL_NGINX_LOCATION_PREFIX: /protected-downloads/
+      MEDIA_LIBRARY_PATH: /downloads/media-library
+      MEDIA_LIBRARY_PUBLIC_WEBDAV_URL: ${MEDIA_LIBRARY_PUBLIC_WEBDAV_URL:-http://localhost:8085/}
+      MEDIA_LIBRARY_MOVE_STRATEGY: ${MEDIA_LIBRARY_MOVE_STRATEGY:-HARDLINK}
+      MEDIA_LIBRARY_FALLBACK_MOVE_STRATEGY: ${MEDIA_LIBRARY_FALLBACK_MOVE_STRATEGY:-COPY}
+      MEDIA_LIBRARY_AUTO_DELETE_ENABLED: ${MEDIA_LIBRARY_AUTO_DELETE_ENABLED:-false}
+      MEDIA_LIBRARY_RETENTION_DAYS: ${MEDIA_LIBRARY_RETENTION_DAYS:-30}
+      MEDIA_S3_ENABLED: ${MEDIA_S3_ENABLED:-false}
+      MEDIA_S3_ENDPOINT_URL: ${MEDIA_S3_ENDPOINT_URL:-}
+      MEDIA_S3_REGION: ${MEDIA_S3_REGION:-}
+      MEDIA_S3_ACCESS_KEY: ${MEDIA_S3_ACCESS_KEY:-}
+      MEDIA_S3_SECRET_KEY: ${MEDIA_S3_SECRET_KEY:-}
+      MEDIA_S3_BUCKET: ${MEDIA_S3_BUCKET:-}
+      MEDIA_S3_PREFIX: ${MEDIA_S3_PREFIX:-}
+      MEDIA_S3_PRESIGNED_LINK_TTL_HOURS: ${MEDIA_S3_PRESIGNED_LINK_TTL_HOURS:-24}
+      MEDIA_S3_PATH_STYLE_ACCESS_ENABLED: ${MEDIA_S3_PATH_STYLE_ACCESS_ENABLED:-true}
+      MEDIA_S3_DELETE_LOCAL_AFTER_UPLOAD: ${MEDIA_S3_DELETE_LOCAL_AFTER_UPLOAD:-true}
+      JACRED_BASE_URL: ${JACRED_BASE_URL:-http://172.17.0.1:9117}
+      JACRED_API_KEY: ${JACRED_API_KEY}
+      JACRED_MAX_RESULTS: ${JACRED_MAX_RESULTS:-5}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      TMDB_LANGUAGE: ${TMDB_LANGUAGE:-ru-RU}
+      TMDB_CONNECT_TIMEOUT_MS: ${TMDB_CONNECT_TIMEOUT_MS:-5000}
+      TMDB_REQUEST_TIMEOUT_MS: ${TMDB_REQUEST_TIMEOUT_MS:-8000}
+      TMDB_CACHE_TTL_MINUTES: ${TMDB_CACHE_TTL_MINUTES:-360}
+      TMDB_DETAILS_CACHE_TTL_MINUTES: ${TMDB_DETAILS_CACHE_TTL_MINUTES:-1440}
+      TMDB_MAX_INLINE_RESULTS: ${TMDB_MAX_INLINE_RESULTS:-10}
+      SEARCH_INLINE_CACHE_SECONDS: ${SEARCH_INLINE_CACHE_SECONDS:-300}
+      SEARCH_INLINE_DEBOUNCE_MS: ${SEARCH_INLINE_DEBOUNCE_MS:-150}
+      SEARCH_SESSION_TTL_MINUTES: ${SEARCH_SESSION_TTL_MINUTES:-30}
+      SEARCH_DEFAULT_QUALITY: ${SEARCH_DEFAULT_QUALITY:-any}
+      SEARCH_DEFAULT_VOICE: ${SEARCH_DEFAULT_VOICE:-any}
+      TELEGRAM_DIRECT_SEND_LIMIT_BYTES: ${TELEGRAM_DIRECT_SEND_LIMIT_BYTES:-2040109465}
+      LLM_ROUTER_ENABLED: ${LLM_ROUTER_ENABLED:-false}
+      OLLAMA_URL: ${OLLAMA_URL:-http://127.0.0.1:11434/api/chat}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct-q4_K_M}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
+      LLM_MIN_CONFIDENCE: ${LLM_MIN_CONFIDENCE:-0.6}
+      DOWNLOAD_LINK_TTL_HOURS: ${DOWNLOAD_LINK_TTL_HOURS:-24}
+      PROGRESS_POLL_INTERVAL_MS: ${PROGRESS_POLL_INTERVAL_MS:-5000}
+      ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:-}
+    volumes:
+      - downloads:/downloads
+    restart: unless-stopped
+
+  media-init:
+    image: busybox:1.36
+    command: ["sh", "-c", "mkdir -p /downloads/media-library"]
+    volumes:
+      - downloads:/downloads
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - bot-app
+    volumes:
+      - downloads:/downloads:ro
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${DOWNLOADS_PUBLIC_PORT:-8088}:80"
+    restart: unless-stopped
+
+  webdav:
+    image: rclone/rclone:latest
+    depends_on:
+      media-init:
+        condition: service_completed_successfully
+    command:
+      - serve
+      - webdav
+      - /media/media-library
+      - --addr
+      - :8085
+      - --user
+      - ${WEBDAV_USERNAME}
+      - --pass
+      - ${WEBDAV_PASSWORD}
+      - --dir-cache-time
+      - 10s
+    volumes:
+      - downloads:/media:ro
+    ports:
+      - "${WEBDAV_PUBLIC_PORT:-8085}:8085"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  telegram-bot-api-data:
+  qbittorrent-config:
+  downloads:

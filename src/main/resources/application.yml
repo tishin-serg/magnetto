@@ -1,0 +1,125 @@
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN}
+  bot-username: ${TELEGRAM_BOT_USERNAME}
+  base-url: ${TELEGRAM_BASE_URL:http://localhost:8081}
+  connect-timeout-ms: ${TELEGRAM_CONNECT_TIMEOUT_MS:10000}
+  request-timeout-ms: ${TELEGRAM_REQUEST_TIMEOUT_MS:60000}
+  upload-timeout-ms: ${TELEGRAM_UPLOAD_TIMEOUT_MS:1800000}
+  file:
+    direct-send-limit-bytes: ${TELEGRAM_DIRECT_SEND_LIMIT_BYTES:2040109465}
+    download-link-ttl-hours: ${DOWNLOAD_LINK_TTL_HOURS:24}
+    prefer-document-for-video: ${TELEGRAM_PREFER_DOCUMENT_FOR_VIDEO:true}
+
+llm:
+  enabled: ${LLM_ROUTER_ENABLED:false}
+  ollama-url: ${OLLAMA_URL:http://127.0.0.1:11434/api/chat}
+  ollama-model: ${OLLAMA_MODEL:qwen2.5:7b-instruct-q4_K_M}
+  timeout-seconds: ${LLM_TIMEOUT_SECONDS:30}
+  min-confidence: ${LLM_MIN_CONFIDENCE:0.6}
+
+downloads:
+  public-base-url: ${DOWNLOADS_PUBLIC_BASE_URL:http://localhost:8088}
+  internal-nginx-location-prefix: ${DOWNLOADS_INTERNAL_NGINX_LOCATION_PREFIX:/protected-downloads/}
+  storage-path: ${DOWNLOADS_STORAGE_PATH:/downloads}
+  cleanup-interval-ms: ${DOWNLOAD_LINK_CLEANUP_INTERVAL_MS:1800000}
+
+media:
+  library:
+    enabled: ${MEDIA_LIBRARY_ENABLED:true}
+    path: ${MEDIA_LIBRARY_PATH:/media/movies}
+    public-webdav-url: ${MEDIA_LIBRARY_PUBLIC_WEBDAV_URL:http://localhost:8085/}
+    move-strategy: ${MEDIA_LIBRARY_MOVE_STRATEGY:HARDLINK}
+    fallback-move-strategy: ${MEDIA_LIBRARY_FALLBACK_MOVE_STRATEGY:COPY}
+    auto-delete-enabled: ${MEDIA_LIBRARY_AUTO_DELETE_ENABLED:false}
+    retention-days: ${MEDIA_LIBRARY_RETENTION_DAYS:30}
+  home-webdav:
+    enabled: ${HOME_WEBDAV_ENABLED:false}
+    base-url: ${HOME_WEBDAV_BASE_URL:http://100.64.0.1:8085/}
+    local-base-url: ${HOME_WEBDAV_LOCAL_BASE_URL:}
+    username: ${HOME_WEBDAV_USERNAME:}
+    password: ${HOME_WEBDAV_PASSWORD:}
+    connect-timeout-ms: ${HOME_WEBDAV_CONNECT_TIMEOUT_MS:5000}
+    request-timeout-ms: ${HOME_WEBDAV_REQUEST_TIMEOUT_MS:30000}
+
+jacred:
+  base-url: ${JACRED_BASE_URL:http://127.0.0.1:9117}
+  api-key: ${JACRED_API_KEY:}
+  connect-timeout-ms: ${JACRED_CONNECT_TIMEOUT_MS:5000}
+  request-timeout-ms: ${JACRED_REQUEST_TIMEOUT_MS:30000}
+  max-results: ${JACRED_MAX_RESULTS:5}
+
+tmdb:
+  api-key: ${TMDB_API_KEY:}
+  base-url: ${TMDB_BASE_URL:https://api.themoviedb.org/3}
+  image-base-url: ${TMDB_IMAGE_BASE_URL:https://image.tmdb.org/t/p/w185}
+  language: ${TMDB_LANGUAGE:ru-RU}
+  connect-timeout-ms: ${TMDB_CONNECT_TIMEOUT_MS:5000}
+  request-timeout-ms: ${TMDB_REQUEST_TIMEOUT_MS:8000}
+  cache-ttl-minutes: ${TMDB_CACHE_TTL_MINUTES:360}
+  details-cache-ttl-minutes: ${TMDB_DETAILS_CACHE_TTL_MINUTES:1440}
+  max-inline-results: ${TMDB_MAX_INLINE_RESULTS:10}
+
+search:
+  inline-cache-seconds: ${SEARCH_INLINE_CACHE_SECONDS:300}
+  inline-debounce-ms: ${SEARCH_INLINE_DEBOUNCE_MS:150}
+  default-language: ${SEARCH_DEFAULT_LANGUAGE:ru-RU}
+  session-ttl-minutes: ${SEARCH_SESSION_TTL_MINUTES:30}
+  default-quality: ${SEARCH_DEFAULT_QUALITY:any}
+  default-voice: ${SEARCH_DEFAULT_VOICE:any}
+
+qbittorrent:
+  base-url: ${QBITTORRENT_BASE_URL:http://localhost:8080}
+  username: ${QBITTORRENT_USERNAME:admin}
+  password: ${QBITTORRENT_PASSWORD:adminadmin}
+  download-path: ${DOWNLOAD_PATH:/downloads}
+  connect-timeout-ms: ${QBITTORRENT_CONNECT_TIMEOUT_MS:5000}
+  request-timeout-ms: ${QBITTORRENT_REQUEST_TIMEOUT_MS:30000}
+  vps:
+    base-url: ${QBITTORRENT_VPS_BASE_URL:${QBITTORRENT_BASE_URL:http://localhost:8080}}
+    username: ${QBITTORRENT_VPS_USERNAME:${QBITTORRENT_USERNAME:admin}}
+    password: ${QBITTORRENT_VPS_PASSWORD:${QBITTORRENT_PASSWORD:adminadmin}}
+    download-path: ${QBITTORRENT_VPS_DOWNLOAD_PATH:${DOWNLOAD_PATH:/downloads}}
+    connect-timeout-ms: ${QBITTORRENT_VPS_CONNECT_TIMEOUT_MS:${QBITTORRENT_CONNECT_TIMEOUT_MS:5000}}
+    request-timeout-ms: ${QBITTORRENT_VPS_REQUEST_TIMEOUT_MS:${QBITTORRENT_REQUEST_TIMEOUT_MS:30000}}
+  home:
+    base-url: ${QBITTORRENT_HOME_BASE_URL:http://100.64.0.1:8080}
+    username: ${QBITTORRENT_HOME_USERNAME:admin}
+    password: ${QBITTORRENT_HOME_PASSWORD:adminadmin}
+    download-path: ${QBITTORRENT_HOME_DOWNLOAD_PATH:/media/movies}
+    connect-timeout-ms: ${QBITTORRENT_HOME_CONNECT_TIMEOUT_MS:5000}
+    request-timeout-ms: ${QBITTORRENT_HOME_REQUEST_TIMEOUT_MS:30000}
+
+app:
+  max-file-size-bytes: ${MAX_FILE_SIZE_BYTES:2040109465}
+  progress-poll-interval-ms: ${PROGRESS_POLL_INTERVAL_MS:5000}
+  recovery-poll-interval-ms: ${RECOVERY_POLL_INTERVAL_MS:60000}
+  allowed-chat-ids: ${ALLOWED_CHAT_IDS:}
+  delete-after-successful-upload: ${DELETE_AFTER_SUCCESSFUL_UPLOAD:true}
+  metadata-timeout-minutes: ${METADATA_TIMEOUT_MINUTES:30}
+  download-timeout-hours: ${DOWNLOAD_TIMEOUT_HOURS:24}
+  upload-timeout-hours: ${UPLOAD_TIMEOUT_HOURS:3}
+  cleanup-timeout-minutes: ${CLEANUP_TIMEOUT_MINUTES:30}
+  max-job-age-hours: ${MAX_JOB_AGE_HOURS:48}
+
+retry:
+  max-attempts: ${RETRY_MAX_ATTEMPTS:3}
+  initial-delay-ms: ${RETRY_INITIAL_DELAY_MS:1000}
+  second-delay-ms: ${RETRY_SECOND_DELAY_MS:3000}
+  max-delay-ms: ${RETRY_MAX_DELAY_MS:10000}
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/torrentbot}
+    username: ${SPRING_DATASOURCE_USERNAME:torrentbot}
+    password: ${SPRING_DATASOURCE_PASSWORD:torrentbot}
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  metrics:
+    tags:
+      application: torrentbot

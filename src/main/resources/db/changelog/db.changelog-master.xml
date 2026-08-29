@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="001-create-download-job" author="codex">
+        <createTable tableName="download_job">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="chat_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="magnet_url" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="magnet_url_hash" type="varchar(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="torrent_hash" type="varchar(128)"/>
+            <column name="torrent_name" type="text"/>
+            <column name="status" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="resume_status" type="varchar(64)"/>
+            <column name="error_code" type="varchar(64)"/>
+            <column name="error_message" type="text"/>
+            <column name="retry_count" type="int" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_retry_at" type="timestamp"/>
+            <column name="delete_after_upload" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_reported_progress_percent" type="int" defaultValueNumeric="-1">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="completed_at" type="timestamp"/>
+            <column name="failed_at" type="timestamp"/>
+        </createTable>
+        <createIndex indexName="idx_download_job_status" tableName="download_job">
+            <column name="status"/>
+        </createIndex>
+        <createIndex indexName="idx_download_job_next_retry_at" tableName="download_job">
+            <column name="next_retry_at"/>
+        </createIndex>
+        <createIndex indexName="idx_download_job_torrent_hash" tableName="download_job">
+            <column name="torrent_hash"/>
+        </createIndex>
+        <createIndex indexName="idx_download_job_created_at" tableName="download_job">
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="002-create-download-file" author="codex">
+        <createTable tableName="download_file">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="job_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_download_file_job" references="download_job(id)"/>
+            </column>
+            <column name="file_name" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="relative_path" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="size_bytes" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="telegram_message_id" type="bigint"/>
+            <column name="upload_attempts" type="int" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cleanup_attempts" type="int" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="error_code" type="varchar(64)"/>
+            <column name="error_message" type="text"/>
+            <column name="created_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex indexName="idx_download_file_job_id" tableName="download_file">
+            <column name="job_id"/>
+        </createIndex>
+        <createIndex indexName="idx_download_file_status" tableName="download_file">
+            <column name="status"/>
+        </createIndex>
+        <createIndex indexName="idx_download_file_relative_path" tableName="download_file">
+            <column name="relative_path"/>
+        </createIndex>
+        <addUniqueConstraint tableName="download_file"
+                             columnNames="job_id, relative_path"
+                             constraintName="uk_download_file_job_relative_path"/>
+    </changeSet>
+
+    <changeSet id="003-create-bot-state" author="codex">
+        <createTable tableName="bot_state">
+            <column name="state_key" type="varchar(128)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="state_value" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="004-create-download-link" author="codex">
+        <createTable tableName="download_link">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="job_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_download_link_job" references="download_job(id)"/>
+            </column>
+            <column name="file_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_download_link_file" references="download_file(id)"/>
+            </column>
+            <column name="token" type="varchar(128)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_download_link_token"/>
+            </column>
+            <column name="chat_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="original_file_name" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="stored_file_name" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="file_path" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="file_size_bytes" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="used_at" type="timestamp"/>
+            <column name="deleted_at" type="timestamp"/>
+        </createTable>
+        <createIndex indexName="idx_download_link_token" tableName="download_link">
+            <column name="token"/>
+        </createIndex>
+        <createIndex indexName="idx_download_link_status_expires_at" tableName="download_link">
+            <column name="status"/>
+            <column name="expires_at"/>
+        </createIndex>
+        <createIndex indexName="idx_download_link_job_id" tableName="download_link">
+            <column name="job_id"/>
+        </createIndex>
+        <createIndex indexName="idx_download_link_file_id" tableName="download_link">
+            <column name="file_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="005-add-download-job-status-message" author="codex">
+        <addColumn tableName="download_job">
+            <column name="status_message_id" type="bigint"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="006-add-download-file-torrent-index" author="codex">
+        <addColumn tableName="download_file">
+            <column name="torrent_file_index" type="int"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="007-add-download-target" author="codex">
+        <addColumn tableName="download_job">
+            <column name="download_target" type="varchar(32)" defaultValue="VPS">
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_status" type="varchar(32)" defaultValue="READY">
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_error_message" type="text"/>
+        </addColumn>
+        <createIndex indexName="idx_download_job_download_target" tableName="download_job">
+            <column name="download_target"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="008-create-home-download-link" author="codex">
+        <createTable tableName="home_download_link">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="token" type="varchar(128)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_home_download_link_token"/>
+            </column>
+            <column name="chat_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="file_name" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="file_size_bytes" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="used_at" type="timestamp"/>
+        </createTable>
+        <createIndex indexName="idx_home_download_link_token" tableName="home_download_link">
+            <column name="token"/>
+        </createIndex>
+        <createIndex indexName="idx_home_download_link_status_expires_at" tableName="home_download_link">
+            <column name="status"/>
+            <column name="expires_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="009-add-download-file-s3-object-key" author="codex">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="download_file" columnName="s3_object_key"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="download_file">
+            <column name="s3_object_key" type="text"/>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>
