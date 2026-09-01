@@ -52,7 +52,7 @@ if [[ ! -f "$jar_path" ]]; then
 fi
 
 docker build -f Dockerfile.runtime -t torrentbot-bot-app .
-docker compose up -d --no-deps bot-app
+docker compose up -d --no-deps --force-recreate bot-app
 
 ready=0
 for attempt in $(seq 1 120); do
