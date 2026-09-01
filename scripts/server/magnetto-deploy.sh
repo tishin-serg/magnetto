@@ -44,14 +44,12 @@ fi
 
 tar -xzf "$archive_realpath" -C "$remote_dir"
 cd "$remote_dir"
-mkdir -p "$remote_dir/.m2"
 
-docker run --rm \
-  -v "$remote_dir/.m2:/root/.m2" \
-  -v "$remote_dir:/workspace" \
-  -w /workspace \
-  maven:3.9-eclipse-temurin-21 \
-  mvn -B -Dmaven.test.skip=true package
+jar_path="$remote_dir/target/torrentbot-0.0.1-SNAPSHOT.jar"
+if [[ ! -f "$jar_path" ]]; then
+  echo "Application jar was not found in deploy archive: $jar_path" >&2
+  exit 2
+fi
 
 docker build -f Dockerfile.runtime -t torrentbot-bot-app .
 docker compose up -d --no-deps bot-app

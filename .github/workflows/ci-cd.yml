@@ -32,6 +32,13 @@ jobs:
       - name: Build package
         run: .\mvnw.cmd -DskipTests package
 
+      - name: Upload application jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: torrentbot-jar
+          path: target/torrentbot-0.0.1-SNAPSHOT.jar
+          if-no-files-found: error
+
   deploy:
     name: Deploy to vdska_pl
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
@@ -53,6 +60,12 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "${VDS_PORT:-22}" "$VDS_HOST" >> ~/.ssh/known_hosts
 
+      - name: Download application jar
+        uses: actions/download-artifact@v4
+        with:
+          name: torrentbot-jar
+          path: target
+
       - name: Upload source
         env:
           VDS_HOST: ${{ secrets.VDS_HOST }}
@@ -61,7 +74,6 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf /tmp/magnetto-source.tar.gz \
-            --exclude='./target' \
             --exclude='./.git' \
             --exclude='./.agents' \
             --exclude='./.codex' \
