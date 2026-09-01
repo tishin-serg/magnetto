@@ -339,9 +339,15 @@ public class DownloadOrchestrator {
     }
 
     private void maybeSendProgress(DownloadJob downloadJob, QbittorrentTorrentInfo info, int progressPercent) {
-        updateStatusMessage(downloadJob, progressText(downloadJob, info, progressPercent));
         int reportedStep = (progressPercent / 10) * 10;
-        if (reportedStep >= 0 && reportedStep >= downloadJob.getLastReportedProgressPercent() + 10) {
+        boolean firstProgressReport = downloadJob.getLastReportedProgressPercent() < 0;
+        boolean nextProgressStep = reportedStep >= downloadJob.getLastReportedProgressPercent() + 10;
+        if (!firstProgressReport && !nextProgressStep) {
+            return;
+        }
+
+        updateStatusMessage(downloadJob, progressText(downloadJob, info, progressPercent));
+        if (reportedStep >= 0) {
             downloadJobRepository.updateLastReportedProgress(downloadJob.getId(), reportedStep);
         }
     }
