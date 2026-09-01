@@ -37,13 +37,17 @@ mkdir -p "$backup_dir" "$remote_dir"
 if [[ -d "$remote_dir" ]]; then
   tar -czf "$backup_dir/torrentbot-before-ci-$ts.tar.gz" \
     --exclude="$remote_dir/.env" \
+    --exclude="$remote_dir/.m2" \
+    --exclude="$remote_dir/target" \
     -C /opt torrentbot
 fi
 
 tar -xzf "$archive_realpath" -C "$remote_dir"
 cd "$remote_dir"
+mkdir -p "$remote_dir/.m2"
 
 docker run --rm \
+  -v "$remote_dir/.m2:/root/.m2" \
   -v "$remote_dir:/workspace" \
   -w /workspace \
   maven:3.9-eclipse-temurin-21 \
