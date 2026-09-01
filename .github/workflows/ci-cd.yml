@@ -70,7 +70,7 @@ jobs:
             --exclude='./*.zip' \
             --exclude='./*.jar' \
             .
-          scp -P "${VDS_PORT:-22}" /tmp/magnetto-source.tar.gz "$VDS_USER@$VDS_HOST:/tmp/magnetto-source.tar.gz"
+          scp -P "${VDS_PORT:-22}" /tmp/magnetto-source.tar.gz "$VDS_USER@$VDS_HOST:/tmp/magnetto-source-${GITHUB_SHA}.tar.gz"
 
       - name: Build and restart on server
         env:
@@ -79,19 +79,4 @@ jobs:
           VDS_USER: ${{ secrets.VDS_USER }}
         run: |
           set -euo pipefail
-          ssh -p "${VDS_PORT:-22}" "$VDS_USER@$VDS_HOST" <<'REMOTE'
-          set -euo pipefail
-          remote_dir=/opt/torrentbot
-          ts=$(date +%Y%m%d-%H%M%S)
-          mkdir -p /opt/torrentbot-backups "$remote_dir"
-          if [ -d "$remote_dir" ]; then
-            tar -czf "/opt/torrentbot-backups/torrentbot-before-ci-$ts.tar.gz" --exclude="$remote_dir/.env" -C /opt torrentbot
-          fi
-          tar -xzf /tmp/magnetto-source.tar.gz -C "$remote_dir"
-          cd "$remote_dir"
-          docker run --rm -v "$remote_dir:/workspace" -w /workspace maven:3.9-eclipse-temurin-21 mvn -B -Dmaven.test.skip=true package
-          docker build -f Dockerfile.runtime -t torrentbot-bot-app .
-          docker compose up -d --no-deps bot-app
-          docker exec torrentbot-bot-app-1 sh -c 'wget -qO- http://127.0.0.1:8080/actuator/health || curl -s http://127.0.0.1:8080/actuator/health'
-          docker logs --since=2m torrentbot-bot-app-1 2>&1 | tail -200
-          REMOTE
+          ssh -p "${VDS_PORT:-22}" "$VDS_USER@$VDS_HOST" "sudo /usr/local/sbin/magnetto-deploy /tmp/magnetto-source-${GITHUB_SHA}.tar.gz"
