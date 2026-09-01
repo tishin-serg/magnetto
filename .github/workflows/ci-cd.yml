@@ -1,0 +1,97 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: magnetto-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Run tests
+        run: .\mvnw.cmd test
+
+      - name: Build package
+        run: .\mvnw.cmd -DskipTests package
+
+  deploy:
+    name: Deploy to vdska_pl
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          VDS_HOST: ${{ secrets.VDS_HOST }}
+          VDS_PORT: ${{ secrets.VDS_PORT }}
+          VDS_SSH_PRIVATE_KEY: ${{ secrets.VDS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VDS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${VDS_PORT:-22}" "$VDS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload source
+        env:
+          VDS_HOST: ${{ secrets.VDS_HOST }}
+          VDS_PORT: ${{ secrets.VDS_PORT }}
+          VDS_USER: ${{ secrets.VDS_USER }}
+        run: |
+          set -euo pipefail
+          tar -czf /tmp/magnetto-source.tar.gz \
+            --exclude='./target' \
+            --exclude='./.git' \
+            --exclude='./.agents' \
+            --exclude='./.codex' \
+            --exclude='./.env' \
+            --exclude='./*.tar.gz' \
+            --exclude='./*.zip' \
+            --exclude='./*.jar' \
+            .
+          scp -P "${VDS_PORT:-22}" /tmp/magnetto-source.tar.gz "$VDS_USER@$VDS_HOST:/tmp/magnetto-source.tar.gz"
+
+      - name: Build and restart on server
+        env:
+          VDS_HOST: ${{ secrets.VDS_HOST }}
+          VDS_PORT: ${{ secrets.VDS_PORT }}
+          VDS_USER: ${{ secrets.VDS_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "${VDS_PORT:-22}" "$VDS_USER@$VDS_HOST" <<'REMOTE'
+          set -euo pipefail
+          remote_dir=/opt/torrentbot
+          ts=$(date +%Y%m%d-%H%M%S)
+          mkdir -p /opt/torrentbot-backups "$remote_dir"
+          if [ -d "$remote_dir" ]; then
+            tar -czf "/opt/torrentbot-backups/torrentbot-before-ci-$ts.tar.gz" --exclude="$remote_dir/.env" -C /opt torrentbot
+          fi
+          tar -xzf /tmp/magnetto-source.tar.gz -C "$remote_dir"
+          cd "$remote_dir"
+          docker run --rm -v "$remote_dir:/workspace" -w /workspace maven:3.9-eclipse-temurin-21 mvn -B -Dmaven.test.skip=true package
+          docker build -f Dockerfile.runtime -t torrentbot-bot-app .
+          docker compose up -d --no-deps bot-app
+          docker exec torrentbot-bot-app-1 sh -c 'wget -qO- http://127.0.0.1:8080/actuator/health || curl -s http://127.0.0.1:8080/actuator/health'
+          docker logs --since=2m torrentbot-bot-app-1 2>&1 | tail -200
+          REMOTE
