@@ -114,6 +114,15 @@ Expected response:
 
 ## Source Sync To VDS
 
+Recommended Windows deploy path:
+
+```powershell
+cd C:\Users\xataa\Documents\скачиватель
+.\scripts\deploy-vdska-pl.ps1
+```
+
+The script runs local tests with `.\mvnw.cmd test`, builds the local jar with JDK 21, syncs source to `vdska_pl`, then builds and restarts `bot-app` on the server. Use `-SkipTests` only when you intentionally want to skip the local test gate.
+
 From Windows project directory:
 
 ```powershell
