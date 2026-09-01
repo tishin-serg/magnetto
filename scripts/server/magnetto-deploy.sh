@@ -51,5 +51,28 @@ docker run --rm \
 
 docker build -f Dockerfile.runtime -t torrentbot-bot-app .
 docker compose up -d --no-deps bot-app
-docker exec torrentbot-bot-app-1 sh -c 'wget -qO- http://127.0.0.1:8080/actuator/health || curl -s http://127.0.0.1:8080/actuator/health'
+
+ready=0
+for attempt in $(seq 1 120); do
+  state="$(docker inspect -f '{{.State.Status}}' torrentbot-bot-app-1 2>/dev/null || true)"
+  if [[ "$state" != "running" ]]; then
+    echo "bot-app container is not running: $state" >&2
+    docker logs --since=5m torrentbot-bot-app-1 2>&1 | tail -200 >&2 || true
+    exit 1
+  fi
+
+  if docker logs --since=5m torrentbot-bot-app-1 2>&1 | grep -q 'Started TorrentBotApplication'; then
+    ready=1
+    break
+  fi
+
+  sleep 2
+done
+
+if [[ "$ready" != "1" ]]; then
+  echo "bot-app did not report successful startup in time." >&2
+  docker logs --since=5m torrentbot-bot-app-1 2>&1 | tail -200 >&2 || true
+  exit 1
+fi
+
 docker logs --since=2m torrentbot-bot-app-1 2>&1 | tail -200
