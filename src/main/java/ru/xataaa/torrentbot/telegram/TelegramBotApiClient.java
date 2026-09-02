@@ -101,6 +101,25 @@ public class TelegramBotApiClient {
         return requireOk(response, ErrorCode.TELEGRAM_SEND_FAILED);
     }
 
+    public void sendChatAction(Long chatId, String action) {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("chat_id", chatId.toString());
+        formData.add("action", action);
+        TelegramApiResponse<Object> response = webClient.post()
+                .uri("/sendChatAction")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<TelegramApiResponse<Object>>() {
+                })
+                .doOnError(WebClientResponseException.class, this::logTelegramHttpError)
+                .onErrorMap(WebClientResponseException.class, exception -> toTelegramException(exception, ErrorCode.TELEGRAM_SEND_FAILED))
+                .block(Duration.ofMillis(telegramProperties.requestTimeoutMs()));
+        if (response == null || !response.isOk()) {
+            throw new RetryableOperationException(ErrorCode.TELEGRAM_SEND_FAILED, "Telegram sendChatAction failed");
+        }
+    }
+
     public void answerCallbackQuery(String callbackQueryId, String text) {
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
         formData.add("callback_query_id", callbackQueryId);

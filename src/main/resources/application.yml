@@ -2,6 +2,7 @@ telegram:
   bot-token: ${TELEGRAM_BOT_TOKEN}
   bot-username: ${TELEGRAM_BOT_USERNAME}
   base-url: ${TELEGRAM_BASE_URL:http://localhost:8081}
+  worker-pool-size: ${TELEGRAM_WORKER_POOL_SIZE:4}
   connect-timeout-ms: ${TELEGRAM_CONNECT_TIMEOUT_MS:10000}
   request-timeout-ms: ${TELEGRAM_REQUEST_TIMEOUT_MS:60000}
   upload-timeout-ms: ${TELEGRAM_UPLOAD_TIMEOUT_MS:1800000}
@@ -45,7 +46,7 @@ jacred:
   base-url: ${JACRED_BASE_URL:http://127.0.0.1:9117}
   api-key: ${JACRED_API_KEY:}
   connect-timeout-ms: ${JACRED_CONNECT_TIMEOUT_MS:5000}
-  request-timeout-ms: ${JACRED_REQUEST_TIMEOUT_MS:30000}
+  request-timeout-ms: ${JACRED_REQUEST_TIMEOUT_MS:8000}
   max-results: ${JACRED_MAX_RESULTS:5}
 
 tmdb:
@@ -53,15 +54,16 @@ tmdb:
   base-url: ${TMDB_BASE_URL:https://api.themoviedb.org/3}
   image-base-url: ${TMDB_IMAGE_BASE_URL:https://image.tmdb.org/t/p/w185}
   language: ${TMDB_LANGUAGE:ru-RU}
-  connect-timeout-ms: ${TMDB_CONNECT_TIMEOUT_MS:5000}
-  request-timeout-ms: ${TMDB_REQUEST_TIMEOUT_MS:8000}
+  connect-timeout-ms: ${TMDB_CONNECT_TIMEOUT_MS:1000}
+  request-timeout-ms: ${TMDB_REQUEST_TIMEOUT_MS:3000}
   cache-ttl-minutes: ${TMDB_CACHE_TTL_MINUTES:360}
   details-cache-ttl-minutes: ${TMDB_DETAILS_CACHE_TTL_MINUTES:1440}
   max-inline-results: ${TMDB_MAX_INLINE_RESULTS:10}
 
 search:
   inline-cache-seconds: ${SEARCH_INLINE_CACHE_SECONDS:300}
-  inline-debounce-ms: ${SEARCH_INLINE_DEBOUNCE_MS:150}
+  inline-debounce-ms: ${SEARCH_INLINE_DEBOUNCE_MS:75}
+  inline-worker-pool-size: ${INLINE_QUERY_POOL_SIZE:4}
   default-language: ${SEARCH_DEFAULT_LANGUAGE:ru-RU}
   session-ttl-minutes: ${SEARCH_SESSION_TTL_MINUTES:30}
   default-quality: ${SEARCH_DEFAULT_QUALITY:any}

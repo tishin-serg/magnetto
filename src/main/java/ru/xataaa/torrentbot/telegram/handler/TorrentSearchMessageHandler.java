@@ -56,6 +56,7 @@ public class TorrentSearchMessageHandler implements TelegramMessageHandler {
         String queryHash = SafeLog.sha256Short(query);
         log.info("movie_chat_search_started: chatId={}, queryHash={}, queryPreview={}",
                 chatId, queryHash, SafeLog.preview(query, 40));
+        telegramMessageService.sendTyping(chatId);
         try {
             List<MovieMetadata> movies = movieMetadataService.search(query);
             if (!movies.isEmpty()) {
