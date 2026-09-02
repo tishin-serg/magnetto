@@ -73,15 +73,21 @@ jobs:
           VDS_USER: ${{ secrets.VDS_USER }}
         run: |
           set -euo pipefail
-          tar -czf /tmp/magnetto-source.tar.gz \
-            --exclude='./.git' \
-            --exclude='./.agents' \
-            --exclude='./.codex' \
-            --exclude='./.env' \
-            --exclude='./*.tar.gz' \
-            --exclude='./*.zip' \
-            --exclude='./*.jar' \
-            .
+          test -f target/torrentbot-0.0.1-SNAPSHOT.jar
+          rm -rf /tmp/magnetto-deploy
+          mkdir -p /tmp/magnetto-deploy
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.agents' \
+            --exclude='.codex' \
+            --exclude='.env' \
+            --exclude='*.tar.gz' \
+            --exclude='*.zip' \
+            --exclude='target' \
+            ./ /tmp/magnetto-deploy/
+          mkdir -p /tmp/magnetto-deploy/target
+          cp target/torrentbot-0.0.1-SNAPSHOT.jar /tmp/magnetto-deploy/target/torrentbot-0.0.1-SNAPSHOT.jar
+          tar -czf /tmp/magnetto-source.tar.gz -C /tmp/magnetto-deploy .
           scp -P "${VDS_PORT:-22}" /tmp/magnetto-source.tar.gz "$VDS_USER@$VDS_HOST:/tmp/magnetto-source-${GITHUB_SHA}.tar.gz"
 
       - name: Build and restart on server

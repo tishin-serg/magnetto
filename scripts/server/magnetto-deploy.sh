@@ -42,6 +42,7 @@ if [[ -d "$remote_dir" ]]; then
     -C /opt torrentbot
 fi
 
+rm -rf "$remote_dir/target"
 tar -xzf "$archive_realpath" -C "$remote_dir"
 cd "$remote_dir"
 
