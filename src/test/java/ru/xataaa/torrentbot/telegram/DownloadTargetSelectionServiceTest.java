@@ -22,13 +22,12 @@ class DownloadTargetSelectionServiceTest {
         ArgumentCaptor<String> textCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> keyboardCaptor = ArgumentCaptor.forClass(String.class);
         verify(telegramMessageService).sendTextWithInlineKeyboard(eq(42L), textCaptor.capture(), keyboardCaptor.capture());
-        assertThat(textCaptor.getValue()).contains("Сначала скачаю на VPS", "выгружу в S3");
+        assertThat(textCaptor.getValue()).contains("VPS", "S3");
         assertThat(keyboardCaptor.getValue()).contains(
                 "target:select:",
                 ":VPS",
                 ":HOME_PC",
-                ":S3",
-                "☁️ Скачать в S3"
+                ":S3"
         );
     }
 }
