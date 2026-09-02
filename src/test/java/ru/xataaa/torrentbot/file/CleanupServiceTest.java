@@ -37,12 +37,21 @@ class CleanupServiceTest {
         UUID jobId = UUID.randomUUID();
         when(downloadFileRepository.findByJobId(jobId)).thenReturn(List.of(
                 file(jobId, DownloadFileStatus.UPLOADED),
+                file(jobId, DownloadFileStatus.S3_UPLOADED),
                 file(jobId, DownloadFileStatus.DOWNLOAD_LINK_CREATED),
                 file(jobId, DownloadFileStatus.SKIPPED_TOO_LARGE),
                 file(jobId, DownloadFileStatus.SKIPPED_UNSUPPORTED)
         ));
 
         assertThat(cleanupService.canCleanup(jobId)).isTrue();
+    }
+
+    @Test
+    void shouldForbidCleanupWhileS3UploadIsInProgress() {
+        UUID jobId = UUID.randomUUID();
+        when(downloadFileRepository.findByJobId(jobId)).thenReturn(List.of(file(jobId, DownloadFileStatus.UPLOADING_TO_S3)));
+
+        assertThat(cleanupService.canCleanup(jobId)).isFalse();
     }
 
     private DownloadFile file(UUID jobId, DownloadFileStatus status) {

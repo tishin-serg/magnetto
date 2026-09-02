@@ -6,6 +6,8 @@ import org.springframework.stereotype.Component;
 import ru.xataaa.torrentbot.downloadlink.HomeDownloadLinkService;
 import ru.xataaa.torrentbot.media.HomeMediaLibraryFile;
 import ru.xataaa.torrentbot.media.HomeMediaLibraryItem;
+import ru.xataaa.torrentbot.media.S3MediaLibraryFile;
+import ru.xataaa.torrentbot.media.S3MediaLibraryService;
 
 @Component
 public class TelegramKeyboardFactory {
@@ -17,6 +19,7 @@ public class TelegramKeyboardFactory {
                   [{"text":"Задачи","callback_data":"menu:tasks"}],
                   [{"text":"Домашняя медиатека","callback_data":"menu:library:home"}],
                   [{"text":"VPS медиатека","callback_data":"menu:library:vps"}],
+                  [{"text":"S3 медиатека","callback_data":"menu:library:s3"}],
                   [{"text":"Свободное место","callback_data":"menu:space"}],
                   [{"text":"Очистить медиатеку","callback_data":"media:cleanup:ask"}],
                   [{"text":"Инструкция iPhone","callback_data":"menu:iphone"}]
@@ -29,6 +32,7 @@ public class TelegramKeyboardFactory {
                 {"inline_keyboard":[
                   [{"text":"Очистить медиатеку VPS","callback_data":"media:cleanup:confirm:local"}],
                   [{"text":"Очистить домашнюю медиатеку","callback_data":"media:cleanup:confirm:home"}],
+                  [{"text":"Очистить S3 медиатеку","callback_data":"media:cleanup:confirm:s3"}],
                   [{"text":"Отмена","callback_data":"menu:home"}]
                 ]}
                 """;
@@ -143,7 +147,7 @@ public class TelegramKeyboardFactory {
         return "{\"inline_keyboard\":["
                 + "[{\"text\":\"Скачать\",\"callback_data\":\"s3:download:" + escapeJson(fileKey) + "\"}],"
                 + "[{\"text\":\"Удалить файл\",\"callback_data\":\"s3:delete:ask:" + escapeJson(fileKey) + "\"}],"
-                + "[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}";
+                + "[{\"text\":\"Назад к S3 медиатеке\",\"callback_data\":\"menu:library:s3\"}]]}";
     }
 
     public String s3FileDownloadKeyboard(String fileKey, String url) {
@@ -156,7 +160,7 @@ public class TelegramKeyboardFactory {
         keyboard.append("[{\"text\":\"Назад к файлу\",\"callback_data\":\"s3:file:")
                 .append(escapeJson(fileKey))
                 .append("\"}],");
-        keyboard.append("[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}");
+        keyboard.append("[{\"text\":\"Назад к S3 медиатеке\",\"callback_data\":\"menu:library:s3\"}]]}");
         return keyboard.toString();
     }
 
@@ -164,7 +168,22 @@ public class TelegramKeyboardFactory {
         return "{\"inline_keyboard\":["
                 + "[{\"text\":\"Да, удалить файл\",\"callback_data\":\"s3:delete:confirm:" + escapeJson(fileKey) + "\"}],"
                 + "[{\"text\":\"Отмена\",\"callback_data\":\"s3:file:" + escapeJson(fileKey) + "\"}],"
-                + "[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}";
+                + "[{\"text\":\"Назад к S3 медиатеке\",\"callback_data\":\"menu:library:s3\"}]]}";
+    }
+
+    public String s3MediaLibraryKeyboard(List<S3MediaLibraryFile> files, S3MediaLibraryService s3MediaLibraryService, int page, int pageSize) {
+        StringBuilder keyboard = new StringBuilder();
+        keyboard.append("{\"inline_keyboard\":[");
+        boolean hasButton = appendS3FileButtons(keyboard, false, files, s3MediaLibraryService, page, pageSize);
+        hasButton = appendS3LibraryNavigation(keyboard, hasButton, files, page, pageSize);
+        if (hasButton) {
+            keyboard.append(",");
+        }
+        keyboard.append("[{\"text\":\"Обновить\",\"callback_data\":\"menu:library:s3:page:")
+                .append(normalizePage(files, page, pageSize))
+                .append("\"}],");
+        keyboard.append("[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}");
+        return keyboard.toString();
     }
 
     public String singleUrlKeyboard(String text, String url) {
@@ -249,6 +268,36 @@ public class TelegramKeyboardFactory {
         return appended;
     }
 
+    private boolean appendS3FileButtons(
+            StringBuilder keyboard,
+            boolean hasButton,
+            List<S3MediaLibraryFile> files,
+            S3MediaLibraryService s3MediaLibraryService,
+            int page,
+            int pageSize
+    ) {
+        if (files == null || files.isEmpty()) {
+            return hasButton;
+        }
+        boolean appended = hasButton;
+        int normalizedPage = normalizePage(files, page, pageSize);
+        int fromIndex = normalizedPage * pageSize;
+        int toIndex = Math.min(files.size(), fromIndex + pageSize);
+        for (int fileIndex = fromIndex; fileIndex < toIndex; fileIndex++) {
+            S3MediaLibraryFile file = files.get(fileIndex);
+            if (appended) {
+                keyboard.append(",");
+            }
+            keyboard.append("[{\"text\":\"")
+                    .append(escapeJson(fileButtonText(fileIndex + 1, file.fileName())))
+                    .append("\",\"callback_data\":\"s3:file:")
+                    .append(s3MediaLibraryService.fileKey(file))
+                    .append("\"}]");
+            appended = true;
+        }
+        return appended;
+    }
+
     private boolean appendHomeLibraryNavigation(
             StringBuilder keyboard,
             boolean hasButton,
@@ -287,6 +336,27 @@ public class TelegramKeyboardFactory {
                 keyboard,
                 hasButton,
                 "menu:library:home:folder:" + folderKey + ":page:",
+                normalizedPage,
+                totalPages
+        );
+    }
+
+    private boolean appendS3LibraryNavigation(
+            StringBuilder keyboard,
+            boolean hasButton,
+            List<S3MediaLibraryFile> files,
+            int page,
+            int pageSize
+    ) {
+        if (files == null || files.size() <= pageSize) {
+            return hasButton;
+        }
+        int normalizedPage = normalizePage(files, page, pageSize);
+        int totalPages = totalPages(files, pageSize);
+        return appendPageNavigation(
+                keyboard,
+                hasButton,
+                "menu:library:s3:page:",
                 normalizedPage,
                 totalPages
         );

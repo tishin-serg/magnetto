@@ -77,7 +77,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         for (DownloadFile file : files) {
             downloadFileRepository.updateStatus(file.getId(), DownloadFileStatus.READY_TO_UPLOAD);
         }
-        if (downloadTarget(downloadJob) == DownloadTarget.VPS && !hasEnoughSpace(chatId, messageId, sumSize(selectionFiles(downloadJob.getId())))) {
+        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectionFiles(downloadJob.getId())))) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
             return;
         }
@@ -97,7 +97,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Выбери хотя бы один файл");
             return;
         }
-        if (downloadTarget(downloadJob) == DownloadTarget.VPS && !hasEnoughSpace(chatId, messageId, sumSize(selectedFiles))) {
+        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectedFiles))) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
             return;
         }
@@ -181,7 +181,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
                     : DownloadFileStatus.SKIPPED_BY_USER;
             downloadFileRepository.updateStatus(file.getId(), status);
         }
-        if (downloadTarget(downloadJob) == DownloadTarget.VPS && !hasEnoughSpace(chatId, messageId, selectedFile.getSizeBytes())) {
+        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, selectedFile.getSizeBytes())) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
             return;
         }
@@ -308,5 +308,10 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
 
     private DownloadTarget downloadTarget(DownloadJob downloadJob) {
         return downloadJob.getDownloadTarget() == null ? DownloadTarget.VPS : downloadJob.getDownloadTarget();
+    }
+
+    private boolean usesVpsStorage(DownloadJob downloadJob) {
+        DownloadTarget target = downloadTarget(downloadJob);
+        return target == DownloadTarget.VPS || target.isS3();
     }
 }

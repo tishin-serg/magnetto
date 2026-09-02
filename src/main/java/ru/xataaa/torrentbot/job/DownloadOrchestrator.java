@@ -27,10 +27,12 @@ import ru.xataaa.torrentbot.file.DownloadFileRepository;
 import ru.xataaa.torrentbot.file.DownloadFileStatus;
 import ru.xataaa.torrentbot.file.FileDeliveryService;
 import ru.xataaa.torrentbot.file.FileDiscoveryService;
+import ru.xataaa.torrentbot.file.S3DeliveryService;
 import ru.xataaa.torrentbot.qbittorrent.QbittorrentTorrentService;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTorrentFile;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTorrentInfo;
 import ru.xataaa.torrentbot.media.HomeWebdavMediaLibraryService;
+import ru.xataaa.torrentbot.media.S3MediaLibraryService;
 import ru.xataaa.torrentbot.retry.NonRetryableOperationException;
 import ru.xataaa.torrentbot.retry.RetryableOperationException;
 import ru.xataaa.torrentbot.telegram.TelegramKeyboardFactory;
@@ -47,6 +49,7 @@ public class DownloadOrchestrator {
     private final QbittorrentTorrentService qbittorrentTorrentService;
     private final FileDiscoveryService fileDiscoveryService;
     private final FileDeliveryService fileDeliveryService;
+    private final S3DeliveryService s3DeliveryService;
     private final CleanupService cleanupService;
     private final TelegramMessageService telegramMessageService;
     private final RetryScheduleService retryScheduleService;
@@ -54,6 +57,7 @@ public class DownloadOrchestrator {
     private final FileDeliveryDecisionService fileDeliveryDecisionService;
     private final DiskSpaceService diskSpaceService;
     private final HomeWebdavMediaLibraryService homeWebdavMediaLibraryService;
+    private final S3MediaLibraryService s3MediaLibraryService;
     private final TelegramKeyboardFactory telegramKeyboardFactory;
     private final FileSelectionViewFactory fileSelectionViewFactory;
     private final TimeProvider timeProvider;
@@ -92,8 +96,10 @@ public class DownloadOrchestrator {
                 case DISCOVERING_FILES -> handleDiscoveringFiles(downloadJob);
                 case WAITING_FILE_SELECTION -> {
                 }
-                case DELIVERY_PENDING -> changeStatus(downloadJob, DownloadJobStatus.UPLOADING_TO_TELEGRAM);
+                case DELIVERY_PENDING -> changeStatus(downloadJob, deliveryStatus(downloadJob));
                 case UPLOADING_TO_TELEGRAM -> handleUploading(downloadJob);
+                case UPLOADING_TO_S3 -> handleUploadingToS3(downloadJob);
+                case S3_UPLOADED -> changeStatus(downloadJob, DownloadJobStatus.DELIVERY_COMPLETED);
                 case DELIVERY_COMPLETED -> handleDeliveryCompleted(downloadJob);
                 case CLEANUP_PENDING -> changeStatus(downloadJob, DownloadJobStatus.CLEANING_UP);
                 case CLEANING_UP -> handleCleaningUp(downloadJob);
@@ -162,7 +168,7 @@ public class DownloadOrchestrator {
             changeStatus(downloadJob, DownloadJobStatus.WAITING_FILE_SELECTION);
             return;
         }
-        if (downloadTarget(downloadJob) == DownloadTarget.VPS) {
+        if (usesVpsStorage(downloadJob)) {
             failIfNotEnoughDiskSpace(downloadJob, requiredBytesForReadyFiles(downloadJob.getId()));
         }
         prepareTorrentFilePriorities(downloadJob.getId(), info.getHash());
@@ -190,7 +196,7 @@ public class DownloadOrchestrator {
             changeStatus(downloadJob, DownloadJobStatus.DELIVERY_COMPLETED);
             return;
         }
-        changeStatus(downloadJob, DownloadJobStatus.DELIVERY_PENDING);
+        changeStatus(downloadJob, deliveryStatus(downloadJob));
     }
 
     private void handleUploading(DownloadJob downloadJob) {
@@ -207,12 +213,26 @@ public class DownloadOrchestrator {
         changeStatus(downloadJob, DownloadJobStatus.DELIVERY_COMPLETED);
     }
 
+    private void handleUploadingToS3(DownloadJob downloadJob) {
+        S3DeliveryService.DeliveryResult deliveryResult = s3DeliveryService.deliverFiles(downloadJob.getId(), downloadJob.getChatId());
+        if (deliveryResult.hasFinalFailure()) {
+            failFinally(downloadJob, ErrorCode.S3_UPLOAD_FAILED, "One or more files failed permanently during S3 upload");
+            return;
+        }
+        if (deliveryResult.hasRetryableFailure()) {
+            scheduleRetry(downloadJob, DownloadJobStatus.UPLOADING_TO_S3, ErrorCode.S3_UPLOAD_FAILED, "S3 upload failed temporarily");
+            telegramMessageService.sendText(downloadJob.getChatId(), "S3 временно не принял файл. Задача не отменена, я продолжу попытки автоматически.");
+            return;
+        }
+        changeStatus(downloadJob, DownloadJobStatus.DELIVERY_COMPLETED);
+    }
+
     private void handleDeliveryCompleted(DownloadJob downloadJob) {
         if (downloadTarget(downloadJob) == DownloadTarget.HOME_PC) {
             handleFinished(downloadJob);
             return;
         }
-        if (downloadJob.isDeleteAfterUpload()) {
+        if (shouldDeleteLocalAfterDelivery(downloadJob)) {
             changeStatus(downloadJob, DownloadJobStatus.CLEANUP_PENDING);
             return;
         }
@@ -228,13 +248,20 @@ public class DownloadOrchestrator {
         LocalDateTime now = timeProvider.now();
         downloadJobRepository.markCompleted(downloadJob.getId(), now);
         int uploadedCount = countFilesByStatus(downloadJob.getId(), DownloadFileStatus.UPLOADED);
+        int s3UploadedCount = countFilesByStatus(downloadJob.getId(), DownloadFileStatus.S3_UPLOADED);
         int downloadLinkCount = countFilesByStatus(downloadJob.getId(), DownloadFileStatus.DOWNLOAD_LINK_CREATED);
         if (downloadTarget(downloadJob) == DownloadTarget.HOME_PC) {
             updateHomePcFinishedMessage(downloadJob);
             startNextQueuedJob();
             return;
         }
-        String cleanupText = downloadJob.isDeleteAfterUpload() ? " Исходные файлы torrent на сервере удалены." : "";
+        String cleanupText = shouldDeleteLocalAfterDelivery(downloadJob) ? " Исходные файлы torrent на сервере удалены." : "";
+        if (downloadTarget(downloadJob).isS3()) {
+            telegramMessageService.sendText(downloadJob.getChatId(),
+                    "Готово. Выгружено в S3 файлов: " + s3UploadedCount + "." + cleanupText);
+            startNextQueuedJob();
+            return;
+        }
         telegramMessageService.sendText(downloadJob.getChatId(),
                 "Готово. Отправлено файлов: " + uploadedCount + ". Временных ссылок: " + downloadLinkCount + "." + cleanupText);
         startNextQueuedJob();
@@ -244,8 +271,13 @@ public class DownloadOrchestrator {
         List<DownloadFile> files = downloadFileRepository.findByJobId(downloadJob.getId());
         int directSendCount = 0;
         int temporaryLinkCount = 0;
+        int s3UploadCount = 0;
         for (DownloadFile file : files) {
             if (file.getStatus() != DownloadFileStatus.READY_TO_UPLOAD) {
+                continue;
+            }
+            if (downloadTarget(downloadJob).isS3()) {
+                s3UploadCount++;
                 continue;
             }
             FileDeliveryMode deliveryMode = fileDeliveryDecisionService.decide(file.getSizeBytes());
@@ -257,14 +289,13 @@ public class DownloadOrchestrator {
         }
         int unsupportedCount = countFilesByStatus(files, DownloadFileStatus.SKIPPED_UNSUPPORTED);
 
-        if (directSendCount > 0 || temporaryLinkCount > 0) {
+        if (directSendCount > 0 || temporaryLinkCount > 0 || s3UploadCount > 0) {
             updateStatusMessage(
                     downloadJob,
                     "Загрузка завершена.\n"
                             + "Раздача: " + safeTorrentName(downloadJob) + "\n"
                             + "Куда скачано: " + targetLabel(downloadTarget(downloadJob)) + "\n"
-                            + "Файлов для прямой отправки: " + directSendCount + "\n"
-                            + "Файлов для WebDAV-медиатеки: " + temporaryLinkCount + "\n"
+                            + deliverySummaryText(directSendCount, temporaryLinkCount, s3UploadCount, downloadTarget(downloadJob))
                             + "Пропущено из-за формата: " + unsupportedCount + "\n\n"
                             + nextStepText(downloadJob)
             );
@@ -371,11 +402,13 @@ public class DownloadOrchestrator {
         if (!finishTime.isBlank()) {
             text.append("Примерно закончит: ").append(finishTime).append("\n");
         }
-        if (downloadTarget(downloadJob) == DownloadTarget.VPS) {
+        if (usesVpsStorage(downloadJob)) {
             DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo();
             text.append("Свободно на сервере: ").append(fileSizeFormatter.format(diskSpaceInfo.usableBytes()));
-        } else {
+        } else if (downloadTarget(downloadJob) == DownloadTarget.HOME_PC) {
             text.append("Файл пишется сразу на домашний компьютер.");
+        } else {
+            text.append("Сначала качаю на VPS, после завершения выгружу в S3.");
         }
         return text.toString();
     }
@@ -594,7 +627,7 @@ public class DownloadOrchestrator {
     }
 
     private void failIfNotEnoughDiskSpace(DownloadJob downloadJob, QbittorrentTorrentInfo info) {
-        if (downloadTarget(downloadJob) != DownloadTarget.VPS) {
+        if (!usesVpsStorage(downloadJob)) {
             return;
         }
         long bytesRequired = info.getAmountLeft() > 0 ? info.getAmountLeft() : info.getTotalSize();
@@ -636,7 +669,7 @@ public class DownloadOrchestrator {
     private String targetLabel(DownloadTarget downloadTarget) {
         return switch (downloadTarget) {
             case HOME_PC -> "домашний ПК";
-            case S3_LATER -> "S3";
+            case S3, S3_LATER -> "S3";
             case VPS -> "VPS";
         };
     }
@@ -662,7 +695,36 @@ public class DownloadOrchestrator {
         if (downloadTarget(downloadJob) == DownloadTarget.HOME_PC) {
             return "Файл уже лежит на домашнем компьютере. Сейчас завершаю задачу и покажу инструкцию для Infuse.";
         }
+        if (downloadTarget(downloadJob).isS3()) {
+            return "Дальше: выгружу выбранные файлы в S3 и пришлю временные ссылки.";
+        }
         return "Дальше: отправка в Telegram или добавление в WebDAV-медиатеку.";
+    }
+
+    private DownloadJobStatus deliveryStatus(DownloadJob downloadJob) {
+        return downloadTarget(downloadJob).isS3()
+                ? DownloadJobStatus.UPLOADING_TO_S3
+                : DownloadJobStatus.UPLOADING_TO_TELEGRAM;
+    }
+
+    private boolean usesVpsStorage(DownloadJob downloadJob) {
+        DownloadTarget target = downloadTarget(downloadJob);
+        return target == DownloadTarget.VPS || target.isS3();
+    }
+
+    private boolean shouldDeleteLocalAfterDelivery(DownloadJob downloadJob) {
+        if (downloadTarget(downloadJob).isS3()) {
+            return s3MediaLibraryService.deleteLocalAfterUpload();
+        }
+        return downloadJob.isDeleteAfterUpload();
+    }
+
+    private String deliverySummaryText(int directSendCount, int temporaryLinkCount, int s3UploadCount, DownloadTarget downloadTarget) {
+        if (downloadTarget.isS3()) {
+            return "Файлов для S3: " + s3UploadCount + "\n";
+        }
+        return "Файлов для прямой отправки: " + directSendCount + "\n"
+                + "Файлов для WebDAV-медиатеки: " + temporaryLinkCount + "\n";
     }
 
     private void updateHomePcFinishedMessage(DownloadJob downloadJob) {

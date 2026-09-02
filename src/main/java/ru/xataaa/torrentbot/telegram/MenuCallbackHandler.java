@@ -13,6 +13,8 @@ import ru.xataaa.torrentbot.media.HomeMediaLibraryItem;
 import ru.xataaa.torrentbot.media.HomeWebdavMediaLibraryService;
 import ru.xataaa.torrentbot.media.MediaLibraryFile;
 import ru.xataaa.torrentbot.media.MediaLibraryService;
+import ru.xataaa.torrentbot.media.S3MediaLibraryFile;
+import ru.xataaa.torrentbot.media.S3MediaLibraryService;
 import ru.xataaa.torrentbot.retry.RetryableOperationException;
 
 @Component
@@ -22,6 +24,7 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
 
     private static final int HOME_LIBRARY_PAGE_SIZE = 10;
     private static final int HOME_FOLDER_PAGE_SIZE = 10;
+    private static final int S3_LIBRARY_PAGE_SIZE = 10;
     private static final int VPS_LIBRARY_TEXT_LIMIT = 15;
 
     private final TelegramMessageService telegramMessageService;
@@ -30,6 +33,7 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
     private final FileSizeFormatter fileSizeFormatter;
     private final MediaLibraryService mediaLibraryService;
     private final HomeWebdavMediaLibraryService homeWebdavMediaLibraryService;
+    private final S3MediaLibraryService s3MediaLibraryService;
     private final HomeDownloadLinkService homeDownloadLinkService;
     private final TimeProvider timeProvider;
     private final TaskOverviewService taskOverviewService;
@@ -63,6 +67,10 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
             handleHomeFolder(chatId, messageId, data);
             return;
         }
+        if (isS3LibraryCallback(data)) {
+            handleS3Library(chatId, messageId, data);
+            return;
+        }
         if (isHomeLibraryCallback(data)) {
             handleHomeLibrary(chatId, messageId, data);
             return;
@@ -85,6 +93,7 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
                 • Отправить magnet-ссылку.
                 • Посмотреть все задачи, поставить отдельную на паузу или продолжить.
                 • Открыть домашнюю или VPS медиатеку.
+                • Открыть S3 медиатеку.
                 • Создать временную ссылку для скачивания на iPhone.
                 • Проверить свободное место.
                 • Очистить медиатеку.
@@ -167,6 +176,22 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
         );
     }
 
+    private void handleS3Library(Long chatId, Long messageId, String data) {
+        int page = s3LibraryPage(data);
+        List<S3MediaLibraryFile> files = s3FilesForKeyboard();
+        editOrSend(
+                chatId,
+                messageId,
+                s3MediaLibraryText(files, page),
+                telegramKeyboardFactory.s3MediaLibraryKeyboard(
+                        files,
+                        s3MediaLibraryService,
+                        normalizePage(files, page, S3_LIBRARY_PAGE_SIZE),
+                        S3_LIBRARY_PAGE_SIZE
+                )
+        );
+    }
+
     private boolean isHomeLibraryCallback(String data) {
         return "menu:library".equals(data)
                 || "menu:library:home".equals(data)
@@ -175,6 +200,11 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
 
     private boolean isHomeFolderCallback(String data) {
         return data != null && data.startsWith("menu:library:home:folder:");
+    }
+
+    private boolean isS3LibraryCallback(String data) {
+        return "menu:library:s3".equals(data)
+                || data.startsWith("menu:library:s3:page:");
     }
 
     private String searchHelpText() {
@@ -272,6 +302,68 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
             log.warn("Home WebDAV folder listing failed: folderKey={}, error={}", folderKey, exception.getMessage(), exception);
             return List.of();
         }
+    }
+
+    private List<S3MediaLibraryFile> s3FilesForKeyboard() {
+        if (!s3MediaLibraryService.isEnabled()) {
+            return List.of();
+        }
+        try {
+            return s3MediaLibraryService.listFiles();
+        } catch (RetryableOperationException exception) {
+            log.warn("S3 media library is temporarily unavailable: error={}", exception.getMessage());
+            return List.of();
+        } catch (RuntimeException exception) {
+            log.warn("S3 media library listing failed: error={}", exception.getMessage(), exception);
+            return List.of();
+        }
+    }
+
+    private String s3MediaLibraryText(List<S3MediaLibraryFile> files, int requestedPage) {
+        if (!s3MediaLibraryService.isEnabled()) {
+            return "S3 медиатека выключена в конфиге бота.";
+        }
+        StringBuilder text = new StringBuilder();
+        text.append("S3 медиатека\n");
+        if (files.isEmpty()) {
+            text.append("\nПока пусто или S3 временно недоступен.");
+            return text.toString();
+        }
+        long totalBytes = 0L;
+        for (S3MediaLibraryFile file : files) {
+            totalBytes += file.sizeBytes();
+        }
+        int page = normalizePage(files, requestedPage, S3_LIBRARY_PAGE_SIZE);
+        int totalPages = totalPages(files, S3_LIBRARY_PAGE_SIZE);
+        int fromIndex = page * S3_LIBRARY_PAGE_SIZE;
+        int toIndex = Math.min(files.size(), fromIndex + S3_LIBRARY_PAGE_SIZE);
+        text.append("Файлов: ")
+                .append(files.size())
+                .append("\n")
+                .append("Занято: ")
+                .append(fileSizeFormatter.format(totalBytes))
+                .append("\n")
+                .append("Страница: ")
+                .append(page + 1)
+                .append(" из ")
+                .append(totalPages)
+                .append("\n")
+                .append("Сортировка: сначала новые")
+                .append("\n\n")
+                .append("Выбери файл кнопкой ниже:\n\n");
+        for (int fileIndex = fromIndex; fileIndex < toIndex; fileIndex++) {
+            S3MediaLibraryFile file = files.get(fileIndex);
+            text.append(fileIndex + 1)
+                    .append(". ")
+                    .append(file.fileName())
+                    .append("\n   ")
+                    .append(fileSizeFormatter.format(file.sizeBytes()));
+            if (file.modifiedAt() != null) {
+                text.append(", ").append(timeProvider.formatDateTime(file.modifiedAt()));
+            }
+            text.append("\n");
+        }
+        return text.toString().trim();
     }
 
     private void appendHomeLibrary(StringBuilder text, List<HomeMediaLibraryItem> items, int requestedPage) {
@@ -445,6 +537,18 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
         }
         try {
             return Integer.parseInt(data.substring(pageSeparatorIndex + marker.length()));
+        } catch (NumberFormatException exception) {
+            return 0;
+        }
+    }
+
+    private int s3LibraryPage(String data) {
+        String prefix = "menu:library:s3:page:";
+        if (!data.startsWith(prefix)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(data.substring(prefix.length()));
         } catch (NumberFormatException exception) {
             return 0;
         }

@@ -99,7 +99,12 @@ public class S3MediaCallbackHandler implements TelegramCallbackHandler {
         }
         s3MediaLibraryService.deleteFile(file.objectKey());
         log.info("Deleted S3 media file: chatId={}, objectKey={}, sizeBytes={}", chatId, file.objectKey(), file.sizeBytes());
-        editOrSend(chatId, messageId, "Файл удалён из S3 медиатеки.\n\n" + file.fileName(), telegramKeyboardFactory.backToMenuKeyboard());
+        editOrSend(chatId, messageId, "Файл удалён из S3 медиатеки.\n\n" + file.fileName(), telegramKeyboardFactory.s3MediaLibraryKeyboard(
+                s3MediaLibraryService.listFiles(),
+                s3MediaLibraryService,
+                0,
+                10
+        ));
     }
 
     private S3MediaLibraryFile findFile(String fileKey, Long chatId, Long messageId) {

@@ -121,7 +121,7 @@ public class QbittorrentClient {
     public void pauseTorrent(DownloadTarget downloadTarget, String hash) {
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
         formData.add("hashes", hash);
-        postForm(downloadTarget, "/api/v2/torrents/pause", formData);
+        postFormWith404Fallback(downloadTarget, "/api/v2/torrents/pause", "/api/v2/torrents/stop", formData);
     }
 
     public void resumeTorrent(String hash) {
@@ -131,7 +131,17 @@ public class QbittorrentClient {
     public void resumeTorrent(DownloadTarget downloadTarget, String hash) {
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
         formData.add("hashes", hash);
-        postForm(downloadTarget, "/api/v2/torrents/resume", formData);
+        postFormWith404Fallback(downloadTarget, "/api/v2/torrents/resume", "/api/v2/torrents/start", formData);
+    }
+
+    private void postFormWith404Fallback(DownloadTarget downloadTarget, String primaryPath, String fallbackPath, MultiValueMap<String, String> formData) {
+        try {
+            postForm(downloadTarget, primaryPath, formData);
+        } catch (WebClientResponseException.NotFound notFoundException) {
+            log.info("qBittorrent endpoint returned 404, retrying fallback: downloadTarget={}, primaryPath={}, fallbackPath={}",
+                    downloadTarget, primaryPath, fallbackPath);
+            postForm(downloadTarget, fallbackPath, formData);
+        }
     }
 
     private void postForm(DownloadTarget downloadTarget, String path, MultiValueMap<String, String> formData) {

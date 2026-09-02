@@ -8,6 +8,7 @@ import ru.xataaa.torrentbot.config.AppProperties;
 import ru.xataaa.torrentbot.media.HomeWebdavCleanupService;
 import ru.xataaa.torrentbot.media.MediaLibraryCleanupResult;
 import ru.xataaa.torrentbot.media.MediaLibraryService;
+import ru.xataaa.torrentbot.media.S3MediaLibraryService;
 
 @Slf4j
 @Component
@@ -17,6 +18,7 @@ public class MediaCleanupCallbackHandler implements TelegramCallbackHandler {
     private final AppProperties appProperties;
     private final MediaLibraryService mediaLibraryService;
     private final HomeWebdavCleanupService homeWebdavCleanupService;
+    private final S3MediaLibraryService s3MediaLibraryService;
     private final FileSizeFormatter fileSizeFormatter;
     private final TelegramMessageService telegramMessageService;
     private final TelegramKeyboardFactory telegramKeyboardFactory;
@@ -38,7 +40,7 @@ public class MediaCleanupCallbackHandler implements TelegramCallbackHandler {
             editOrSend(
                     chatId,
                     messageId,
-                    "Что очистить?\n\nVPS — локальная WebDAV-медиатека на сервере.\nДомашняя медиатека — WebDAV-папка на домашнем ПК.",
+                    "Что очистить?\n\nVPS — локальная WebDAV-медиатека на сервере.\nДомашняя медиатека — WebDAV-папка на домашнем ПК.\nS3 — только объекты внутри настроенного prefix.",
                     telegramKeyboardFactory.cleanupConfirmKeyboard()
             );
             return;
@@ -49,6 +51,10 @@ public class MediaCleanupCallbackHandler implements TelegramCallbackHandler {
         }
         if ("media:cleanup:confirm:home".equals(data)) {
             cleanupHome(chatId, messageId, callbackQueryId);
+            return;
+        }
+        if ("media:cleanup:confirm:s3".equals(data)) {
+            cleanupS3(chatId, messageId, callbackQueryId);
         }
     }
 
@@ -90,8 +96,32 @@ public class MediaCleanupCallbackHandler implements TelegramCallbackHandler {
         }
     }
 
+    private void cleanupS3(Long chatId, Long messageId, String callbackQueryId) {
+        telegramMessageService.answerCallbackQuery(callbackQueryId, "Очищаю S3 медиатеку");
+        try {
+            MediaLibraryCleanupResult result = s3MediaLibraryService.cleanupAllFiles();
+            log.info("Manual S3 media cleanup completed: chatId={}, deletedFiles={}, deletedBytes={}",
+                    chatId, result.deletedFiles(), result.deletedBytes());
+            editOrSend(
+                    chatId,
+                    messageId,
+                    "S3 медиатека очищена.\nУдалено файлов: " + result.deletedFiles()
+                            + "\nОсвобождено: " + fileSizeFormatter.format(result.deletedBytes()),
+                    telegramKeyboardFactory.backToMenuKeyboard()
+            );
+        } catch (RuntimeException runtimeException) {
+            log.warn("Manual S3 media cleanup failed: chatId={}, error={}", chatId, runtimeException.getMessage());
+            editOrSend(
+                    chatId,
+                    messageId,
+                    "S3 медиатеку пока не удалось очистить. Проверь S3-настройки и доступность bucket.",
+                    telegramKeyboardFactory.backToMenuKeyboard()
+            );
+        }
+    }
+
     public String cleanupAskText() {
-        return "Что очистить?\n\nVPS - локальная WebDAV-медиатека на сервере.\nДомашняя медиатека - WebDAV-папка на домашнем ПК.";
+        return "Что очистить?\n\nVPS - локальная WebDAV-медиатека на сервере.\nДомашняя медиатека - WebDAV-папка на домашнем ПК.\nS3 - только объекты внутри настроенного prefix.";
     }
 
     private void editOrSend(Long chatId, Long messageId, String text, String keyboardJson) {

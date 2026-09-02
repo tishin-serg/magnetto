@@ -125,7 +125,7 @@ public class TaskOverviewService {
         DownloadTarget effectiveTarget = downloadTarget == null ? DownloadTarget.VPS : downloadTarget;
         return switch (effectiveTarget) {
             case HOME_PC -> "домашний ПК";
-            case S3_LATER -> "S3";
+            case S3, S3_LATER -> "S3";
             case VPS -> "VPS";
         };
     }

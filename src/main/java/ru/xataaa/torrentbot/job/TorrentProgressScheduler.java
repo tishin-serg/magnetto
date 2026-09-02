@@ -22,6 +22,7 @@ public class TorrentProgressScheduler {
             DownloadJobStatus.DISCOVERING_FILES,
             DownloadJobStatus.DELIVERY_PENDING,
             DownloadJobStatus.UPLOADING_TO_TELEGRAM,
+            DownloadJobStatus.UPLOADING_TO_S3,
             DownloadJobStatus.DELIVERY_COMPLETED,
             DownloadJobStatus.CLEANUP_PENDING,
             DownloadJobStatus.CLEANING_UP,

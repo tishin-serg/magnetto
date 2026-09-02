@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import ru.xataaa.torrentbot.job.DownloadJobService;
 import ru.xataaa.torrentbot.job.DownloadTarget;
+import ru.xataaa.torrentbot.media.S3MediaLibraryService;
 
 @Component
 @RequiredArgsConstructor
@@ -14,6 +15,7 @@ public class DownloadTargetSelectionCallbackHandler implements TelegramCallbackH
     private final DownloadTargetSelectionCache downloadTargetSelectionCache;
     private final DownloadJobService downloadJobService;
     private final TelegramMessageService telegramMessageService;
+    private final S3MediaLibraryService s3MediaLibraryService;
 
     @Override
     public boolean supports(String data) {
@@ -35,6 +37,13 @@ public class DownloadTargetSelectionCallbackHandler implements TelegramCallbackH
             telegramMessageService.editText(chatId, messageId, "Этот выбор устарел. Отправь magnet или выбери раздачу ещё раз.", null);
             return;
         }
+        if (downloadTarget.isS3() && !isS3Ready()) {
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "S3 не настроен");
+            telegramMessageService.editText(chatId, messageId,
+                    "S3 сейчас выключен или не настроен. Проверь MEDIA_S3_ENABLED, MEDIA_S3_BUCKET, MEDIA_S3_ACCESS_KEY и MEDIA_S3_SECRET_KEY, потом выбери раздачу ещё раз.",
+                    null);
+            return;
+        }
         downloadTargetSelectionCache.remove(selectionId);
         telegramMessageService.answerCallbackQuery(callbackQueryId, "Запускаю загрузку");
         telegramMessageService.editText(chatId, messageId, "Выбрано: " + targetLabel(downloadTarget) + ". Создаю задачу...", null);
@@ -44,8 +53,12 @@ public class DownloadTargetSelectionCallbackHandler implements TelegramCallbackH
     private String targetLabel(DownloadTarget downloadTarget) {
         return switch (downloadTarget) {
             case HOME_PC -> "домашний ПК";
-            case S3_LATER -> "S3";
+            case S3, S3_LATER -> "S3";
             case VPS -> "VPS";
         };
+    }
+
+    private boolean isS3Ready() {
+        return s3MediaLibraryService.isEnabled() && s3MediaLibraryService.isConfigured();
     }
 }

@@ -21,11 +21,13 @@ public class CleanupService {
         for (DownloadFile file : files) {
             if (file.getStatus() == DownloadFileStatus.READY_TO_UPLOAD
                     || file.getStatus() == DownloadFileStatus.UPLOADING
+                    || file.getStatus() == DownloadFileStatus.UPLOADING_TO_S3
                     || file.getStatus() == DownloadFileStatus.UNKNOWN_UPLOAD_RESULT
                     || file.getStatus() == DownloadFileStatus.UPLOAD_FAILED_RETRYABLE) {
                 return false;
             }
             if (file.getStatus() != DownloadFileStatus.UPLOADED
+                    && file.getStatus() != DownloadFileStatus.S3_UPLOADED
                     && file.getStatus() != DownloadFileStatus.DOWNLOAD_LINK_CREATED
                     && file.getStatus() != DownloadFileStatus.SKIPPED_TOO_LARGE
                     && file.getStatus() != DownloadFileStatus.SKIPPED_UNSUPPORTED

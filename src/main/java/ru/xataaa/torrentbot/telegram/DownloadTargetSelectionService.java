@@ -25,7 +25,8 @@ public class DownloadTargetSelectionService {
         text.append("\nЕсли внутри torrent несколько видеофайлов, я сначала загружу metadata и покажу выбор файлов/серий. ");
         text.append("Скачивание продолжится только после подтверждения выбранных файлов.\n\n");
         text.append("VPS скачивает на сервер как раньше.\n");
-        text.append("Домашний ПК скачивает в qBittorrent на твоём компьютере через Tailscale.");
+        text.append("Домашний ПК скачивает в qBittorrent на твоём компьютере через Tailscale.\n");
+        text.append("S3: сначала скачаю на VPS, потом выгружу в S3 и дам ссылку.");
         telegramMessageService.sendTextWithInlineKeyboard(chatId, text.toString(), keyboard(selectionId));
     }
 
@@ -33,8 +34,9 @@ public class DownloadTargetSelectionService {
         return """
                 {"inline_keyboard":[
                   [{"text":"💾 Скачать на VPS","callback_data":"target:select:%s:VPS"}],
-                  [{"text":"🏠 Скачать на домашний ПК","callback_data":"target:select:%s:HOME_PC"}]
+                  [{"text":"🏠 Скачать на домашний ПК","callback_data":"target:select:%s:HOME_PC"}],
+                  [{"text":"☁️ Скачать в S3","callback_data":"target:select:%s:S3"}]
                 ]}
-                """.formatted(selectionId, selectionId);
+                """.formatted(selectionId, selectionId, selectionId);
     }
 }

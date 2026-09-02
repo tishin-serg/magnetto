@@ -95,7 +95,7 @@ public class DownloadJobService {
     private String targetLabel(DownloadTarget downloadTarget) {
         return switch (downloadTarget) {
             case HOME_PC -> "домашний ПК";
-            case S3_LATER -> "S3";
+            case S3, S3_LATER -> "S3";
             case VPS -> "VPS";
         };
     }

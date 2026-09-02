@@ -51,6 +51,12 @@ public class S3MediaLibraryService {
         return properties.enabled();
     }
 
+    public boolean isConfigured() {
+        return properties.bucket() != null && !properties.bucket().isBlank()
+                && properties.accessKey() != null && !properties.accessKey().isBlank()
+                && properties.secretKey() != null && !properties.secretKey().isBlank();
+    }
+
     public long ttlHours() {
         return properties.presignedLinkTtlHours();
     }
@@ -302,9 +308,7 @@ public class S3MediaLibraryService {
         if (!properties.enabled()) {
             throw new NonRetryableOperationException(ErrorCode.S3_UNAVAILABLE, "S3 media library is disabled");
         }
-        if (properties.bucket() == null || properties.bucket().isBlank()
-                || properties.accessKey() == null || properties.accessKey().isBlank()
-                || properties.secretKey() == null || properties.secretKey().isBlank()) {
+        if (!isConfigured()) {
             throw new NonRetryableOperationException(ErrorCode.S3_UNAVAILABLE, "S3 media library is not configured");
         }
     }
