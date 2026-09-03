@@ -2,6 +2,7 @@ package ru.xataaa.torrentbot.torrentsearch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,16 +59,15 @@ class TorrentSearchServiceCacheTest {
     }
 
     @Test
-    void shouldReturnEmptyResultsWhenStructuredIsEmptyAndFallbackTimesOut() {
+    void shouldSkipFallbackForTechnicalLowSignalQuery() {
         TorrentSearchRequest request = TorrentSearchRequest.fromUserText("zxqv-no-tmdb-match-884421");
         when(jacredClient.search(request, false)).thenReturn(List.of());
-        when(jacredClient.search(request, true)).thenThrow(new RuntimeException("fallback timeout"));
 
         List<TorrentSearchResult> results = service.search(request);
 
         assertThat(results).isEmpty();
         verify(jacredClient).search(request, false);
-        verify(jacredClient).search(request, true);
+        verify(jacredClient, never()).search(request, true);
     }
 
     private JacredSearchResult result(String title, int seeders) {

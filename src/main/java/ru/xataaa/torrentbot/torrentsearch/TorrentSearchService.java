@@ -181,7 +181,7 @@ public class TorrentSearchService {
     private List<JacredSearchResult> loadRawResults(TorrentSearchRequest request, TorrentSearchFilters filters) {
         if (!filters.hasSpecificFilters()) {
             List<JacredSearchResult> rawResults = new ArrayList<>(jacredClient.search(request, false));
-            if (rawResults.size() < 3) {
+            if (rawResults.size() < 3 && shouldUseFallbackQuerySearch(request)) {
                 rawResults.addAll(loadFallbackResults(request, rawResults.size()));
             }
             return rawResults;
@@ -203,6 +203,22 @@ public class TorrentSearchService {
             }
             throw completionException;
         }
+    }
+
+    private boolean shouldUseFallbackQuerySearch(TorrentSearchRequest request) {
+        String query = request.query() == null ? "" : request.query().trim();
+        if (query.length() < 2) {
+            return false;
+        }
+        long letterCount = query.chars().filter(Character::isLetter).count();
+        if (letterCount < 2) {
+            return false;
+        }
+        long technicalDelimiterCount = query.chars()
+                .filter(character -> character == '-' || character == '_' || character == '.')
+                .count();
+        boolean hasDigit = query.chars().anyMatch(Character::isDigit);
+        return technicalDelimiterCount < 2 || !hasDigit;
     }
 
     private List<JacredSearchResult> loadFallbackResults(TorrentSearchRequest request, int structuredResultCount) {
