@@ -51,6 +51,9 @@ public class JacredClient {
         long startedAt = System.nanoTime();
         log.info("jacred_client_search_started: queryHash={}, type={}", queryHash, searchType);
         try {
+            int timeoutMs = fallbackQuerySearch
+                    ? jacredProperties.fallbackRequestTimeoutMs()
+                    : jacredProperties.requestTimeoutMs();
             JacredSearchResponse response = webClient.get()
                     .uri(uriBuilder -> {
                         uriBuilder.path("/api/v2.0/indexers/all/results")
@@ -75,7 +78,7 @@ public class JacredClient {
                     })
                     .retrieve()
                     .bodyToMono(JacredSearchResponse.class)
-                    .block(Duration.ofMillis(jacredProperties.requestTimeoutMs()));
+                    .block(Duration.ofMillis(timeoutMs));
             List<JacredSearchResult> results = response == null || response.getResults() == null
                     ? Collections.emptyList()
                     : response.getResults();

@@ -1,6 +1,10 @@
 package ru.xataaa.torrentbot.telegram.handler;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,6 +22,8 @@ import ru.xataaa.torrentbot.torrentsearch.TorrentSearchService;
 @Component
 @RequiredArgsConstructor
 public class TorrentSearchMessageHandler implements TelegramMessageHandler {
+
+    private static final long MOVIE_METADATA_FAST_PATH_TIMEOUT_MS = 1_500L;
 
     private final TorrentSearchService torrentSearchService;
     private final MovieMetadataService movieMetadataService;
@@ -54,10 +60,17 @@ public class TorrentSearchMessageHandler implements TelegramMessageHandler {
             return;
         }
         String queryHash = SafeLog.sha256Short(query);
+        telegramMessageService.sendTyping(chatId);
+        if (isDirectTorrentSearch(text)) {
+            sendDirectTorrentSearch(chatId, query, queryHash);
+            return;
+        }
         log.info("movie_chat_search_started: chatId={}, queryHash={}, queryPreview={}",
                 chatId, queryHash, SafeLog.preview(query, 40));
+        CompletableFuture<TorrentSearchService.SearchPage> directSearch = CompletableFuture.supplyAsync(() -> torrentSearchService.searchFirstPage(query));
+        CompletableFuture<List<MovieMetadata>> movieSearch = CompletableFuture.supplyAsync(() -> movieMetadataService.search(query));
         try {
-            List<MovieMetadata> movies = movieMetadataService.search(query);
+            List<MovieMetadata> movies = movieSearch.get(MOVIE_METADATA_FAST_PATH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             if (!movies.isEmpty()) {
                 telegramMessageService.sendTextWithInlineKeyboard(
                         chatId,
@@ -68,22 +81,43 @@ public class TorrentSearchMessageHandler implements TelegramMessageHandler {
                         chatId, queryHash, movies.size());
                 return;
             }
-        } catch (RuntimeException runtimeException) {
+        } catch (TimeoutException timeoutException) {
+            movieSearch.cancel(true);
+            log.warn("movie_chat_search_fast_path_timeout: chatId={}, queryHash={}, timeoutMs={}",
+                    chatId, queryHash, MOVIE_METADATA_FAST_PATH_TIMEOUT_MS);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            log.warn("movie_chat_search_interrupted: chatId={}, queryHash={}", chatId, queryHash);
+        } catch (ExecutionException executionException) {
+            Throwable cause = executionException.getCause() == null ? executionException : executionException.getCause();
             log.warn("movie_chat_search_failed: chatId={}, queryHash={}, error={}",
-                    chatId, queryHash, runtimeException.getMessage());
+                    chatId, queryHash, cause.getMessage());
         }
-        sendDirectTorrentSearch(chatId, query, queryHash);
+        sendDirectTorrentSearch(chatId, query, queryHash, directSearch);
     }
 
     private void sendDirectTorrentSearch(Long chatId, String query, String queryHash) {
+        sendDirectTorrentSearch(chatId, query, queryHash, CompletableFuture.supplyAsync(() -> torrentSearchService.searchFirstPage(query)));
+    }
+
+    private void sendDirectTorrentSearch(Long chatId, String query, String queryHash, CompletableFuture<TorrentSearchService.SearchPage> searchFuture) {
         TorrentSearchService.SearchPage searchPage;
         try {
-            searchPage = torrentSearchService.searchFirstPage(query);
-        } catch (RuntimeException runtimeException) {
-            log.warn("Torrent search failed: chatId={}, queryHash={}, error={}", chatId, queryHash, runtimeException.getMessage());
+            searchPage = searchFuture.get();
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            telegramMessageService.sendText(chatId, "Поиск временно недоступен. Попробуй ещё раз позже.");
+            return;
+        } catch (ExecutionException executionException) {
+            Throwable cause = executionException.getCause() == null ? executionException : executionException.getCause();
+            log.warn("Torrent search failed: chatId={}, queryHash={}, error={}", chatId, queryHash, cause.getMessage());
             telegramMessageService.sendText(chatId, "Поиск временно недоступен. Внешний источник не ответил, попробуй ещё раз позже.");
             return;
         }
+        sendSearchPage(chatId, searchPage);
+    }
+
+    private void sendSearchPage(Long chatId, TorrentSearchService.SearchPage searchPage) {
         if (searchPage.results().isEmpty()) {
             telegramMessageService.sendText(chatId, torrentSearchService.formatPageMessage(searchPage));
             return;
@@ -93,6 +127,10 @@ public class TorrentSearchMessageHandler implements TelegramMessageHandler {
                 torrentSearchService.formatPageMessage(searchPage),
                 torrentSearchService.resultsKeyboard(searchPage)
         );
+    }
+
+    private boolean isDirectTorrentSearch(String text) {
+        return text != null && text.trim().startsWith("/search");
     }
 
     private String normalizeQuery(String text) {

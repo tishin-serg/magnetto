@@ -179,7 +179,7 @@ public class DownloadOrchestrator {
         QbittorrentTorrentInfo info = findTorrent(downloadJob)
                 .orElseThrow(() -> new RetryableOperationException(ErrorCode.QBITTORRENT_UNAVAILABLE, "Torrent not found"));
         int progressPercent = (int) Math.floor(info.getProgress() * 100);
-        log.info("Torrent progress updated: jobId={}, hash={}, progress={}%, state={}", downloadJob.getId(), info.getHash(), progressPercent, info.getState());
+        maybeLogProgress(downloadJob, info, progressPercent);
         maybeSendProgress(downloadJob, info, progressPercent);
         if (info.getProgress() >= 1.0d) {
             sendDownloadCompletedMessage(downloadJob, info);
@@ -367,6 +367,16 @@ public class DownloadOrchestrator {
             log.info("Recovered torrent hash after restart: jobId={}, torrentHash={}, torrentName={}, downloadTarget={}", downloadJob.getId(), info.getHash(), info.getName(), downloadTarget);
         });
         return byTag;
+    }
+
+    private void maybeLogProgress(DownloadJob downloadJob, QbittorrentTorrentInfo info, int progressPercent) {
+        int reportedStep = (progressPercent / 10) * 10;
+        boolean firstProgressReport = downloadJob.getLastReportedProgressPercent() < 0;
+        boolean nextProgressStep = reportedStep >= downloadJob.getLastReportedProgressPercent() + 10;
+        boolean completed = info.getProgress() >= 1.0d;
+        if (firstProgressReport || nextProgressStep || completed) {
+            log.info("Torrent progress updated: jobId={}, hash={}, progress={}%, state={}", downloadJob.getId(), info.getHash(), progressPercent, info.getState());
+        }
     }
 
     private void maybeSendProgress(DownloadJob downloadJob, QbittorrentTorrentInfo info, int progressPercent) {
@@ -781,6 +791,7 @@ public class DownloadOrchestrator {
                 .append("Для телевизора дома используй Wi-Fi адрес, если телевизор в той же сети.");
         return limitTelegramText(text.toString());
     }
+
     private String shortTelegramFileName(String fileName) {
         if (fileName == null || fileName.isBlank()) {
             return "РІРёРґРµРѕС„Р°Р№Р»";

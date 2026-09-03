@@ -37,6 +37,17 @@ public class TelegramMessageService {
         return retryExecutor.execute("telegram.editMessageText", () -> telegramBotApiClient.editMessageText(chatId, messageId, text, replyMarkupJson));
     }
 
+    public void sendTyping(Long chatId) {
+        if (chatId == null) {
+            return;
+        }
+        try {
+            telegramBotApiClient.sendChatAction(chatId, "typing");
+        } catch (RuntimeException runtimeException) {
+            log.debug("Telegram sendChatAction skipped: chatId={}, error={}", chatId, runtimeException.getMessage());
+        }
+    }
+
     public void answerCallbackQuery(String callbackQueryId, String text) {
         retryExecutor.executeVoid("telegram.answerCallbackQuery", () -> telegramBotApiClient.answerCallbackQuery(callbackQueryId, text));
     }

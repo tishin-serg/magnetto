@@ -2,11 +2,17 @@ package ru.xataaa.torrentbot.torrentsearch;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +28,7 @@ import ru.xataaa.torrentbot.movie.MovieSearchSession;
 public class TorrentSearchService {
 
     private static final int PAGE_SIZE = 5;
+    private static final Duration SEARCH_CACHE_TTL = Duration.ofMinutes(15);
     private static final List<String> GOOD_QUALITY_MARKERS = List.of(
             "2160p", "1080p", "720p", "web-dl", "webrip", "bdrip", "hdrip", "bluray", "blu-ray"
     );
@@ -35,6 +42,8 @@ public class TorrentSearchService {
     private final FileSizeFormatter fileSizeFormatter;
     private final MeterRegistry meterRegistry;
     private final TorrentTitleParser torrentTitleParser = new TorrentTitleParser();
+    private final Map<String, CachedSearchResults> searchCache = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<List<TorrentSearchResult>>> inFlightSearches = new ConcurrentHashMap<>();
 
     public List<TorrentSearchResult> search(String userText) {
         TorrentSearchRequest request = TorrentSearchRequest.fromUserText(userText);
@@ -78,26 +87,21 @@ public class TorrentSearchService {
                 filters.episodeNumbers()
         );
         try {
-            List<JacredSearchResult> rawResults = new ArrayList<>(jacredClient.search(request, false));
-            if (rawResults.size() < 3 || filters.hasSpecificFilters()) {
-                rawResults.addAll(jacredClient.search(request, true));
+            List<TorrentSearchResult> cachedResults = cachedSearchResults(request, filters);
+            List<TorrentSearchResult> results;
+            int rawResultCount;
+            if (cachedResults != null) {
+                rawResultCount = cachedResults.size();
+                results = cachedResults.stream()
+                        .map(torrentSearchCache::store)
+                        .toList();
+            } else {
+                SearchLoadResult loadedResults = loadSearchResults(request, filters, queryHash);
+                rawResultCount = loadedResults.rawResultCount();
+                results = loadedResults.results().stream()
+                        .map(torrentSearchCache::store)
+                        .toList();
             }
-
-            List<TorrentSearchResult> sortedResults = rawResults.stream()
-                    .map(this::toSearchResult)
-                    .filter(result -> result.title() != null && !result.title().isBlank())
-                    .filter(TorrentSearchResult::hasMagnet)
-                    .filter(this::isAcceptableQuality)
-                    .filter(result -> matchesFilters(result, filters))
-                    .sorted(resultComparator())
-                    .toList();
-
-            List<TorrentSearchResult> preferredResults = removeZeroSeederResultsIfPossible(sortedResults);
-            int maxResults = Math.max(PAGE_SIZE, jacredProperties.maxResults() * 10);
-            List<TorrentSearchResult> results = preferredResults.stream()
-                    .limit(maxResults)
-                    .map(torrentSearchCache::store)
-                    .toList();
             long durationMs = (System.nanoTime() - startedAt) / 1_000_000L;
             sample.stop(Timer.builder("jacred.search.duration")
                     .tag("source", "jacred")
@@ -106,7 +110,7 @@ public class TorrentSearchService {
                     .register(meterRegistry));
             meterRegistry.gauge("torrent.filter.result_count", results.size());
             log.info("jacred_search_completed: queryHash={}, rawResultCount={}, resultCount={}, durationMs={}",
-                    queryHash, rawResults.size(), results.size(), durationMs);
+                    queryHash, rawResultCount, results.size(), durationMs);
             return results;
         } catch (RuntimeException runtimeException) {
             sample.stop(Timer.builder("jacred.search.duration")
@@ -118,6 +122,143 @@ public class TorrentSearchService {
             log.warn("jacred_search_failed: queryHash={}, error={}", queryHash, runtimeException.getMessage());
             throw runtimeException;
         }
+    }
+
+    private List<TorrentSearchResult> cachedSearchResults(TorrentSearchRequest request, TorrentSearchFilters filters) {
+        cleanupExpiredSearchCache();
+        String cacheKey = searchCacheKey(request, filters);
+        CachedSearchResults cachedSearchResults = searchCache.get(cacheKey);
+        if (cachedSearchResults == null || cachedSearchResults.expiresAt().isBefore(Instant.now())) {
+            searchCache.remove(cacheKey);
+            return null;
+        }
+        log.info("jacred_search_cache_hit: queryHash={}, resultCount={}", SafeLog.sha256Short(request.query()), cachedSearchResults.results().size());
+        return cachedSearchResults.results();
+    }
+
+    private SearchLoadResult loadSearchResults(TorrentSearchRequest request, TorrentSearchFilters filters, String queryHash) {
+        String cacheKey = searchCacheKey(request, filters);
+        CompletableFuture<List<TorrentSearchResult>> currentSearch = new CompletableFuture<>();
+        CompletableFuture<List<TorrentSearchResult>> existingSearch = inFlightSearches.putIfAbsent(cacheKey, currentSearch);
+        if (existingSearch != null) {
+            log.info("jacred_search_singleflight_wait: queryHash={}", queryHash);
+            try {
+                return new SearchLoadResult(existingSearch.join(), 0);
+            } catch (CompletionException completionException) {
+                Throwable cause = completionException.getCause();
+                if (cause instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                throw completionException;
+            }
+        }
+        try {
+            List<JacredSearchResult> rawResults = loadRawResults(request, filters);
+            List<TorrentSearchResult> sortedResults = rawResults.stream()
+                    .map(this::toSearchResult)
+                    .filter(result -> result.title() != null && !result.title().isBlank())
+                    .filter(TorrentSearchResult::hasMagnet)
+                    .filter(this::isAcceptableQuality)
+                    .filter(result -> matchesFilters(result, filters))
+                    .sorted(resultComparator())
+                    .toList();
+            List<TorrentSearchResult> preferredResults = removeZeroSeederResultsIfPossible(sortedResults);
+            int maxResults = Math.max(PAGE_SIZE, jacredProperties.maxResults() * 10);
+            List<TorrentSearchResult> results = preferredResults.stream()
+                    .limit(maxResults)
+                    .toList();
+            searchCache.put(cacheKey, new CachedSearchResults(results, Instant.now().plus(SEARCH_CACHE_TTL)));
+            currentSearch.complete(results);
+            return new SearchLoadResult(results, rawResults.size());
+        } catch (RuntimeException runtimeException) {
+            currentSearch.completeExceptionally(runtimeException);
+            throw runtimeException;
+        } finally {
+            inFlightSearches.remove(cacheKey, currentSearch);
+        }
+    }
+
+    private List<JacredSearchResult> loadRawResults(TorrentSearchRequest request, TorrentSearchFilters filters) {
+        if (!filters.hasSpecificFilters()) {
+            List<JacredSearchResult> rawResults = new ArrayList<>(jacredClient.search(request, false));
+            if (rawResults.size() < 3 && shouldUseFallbackQuerySearch(request)) {
+                rawResults.addAll(loadFallbackResults(request, rawResults.size()));
+            }
+            return rawResults;
+        }
+        CompletableFuture<List<JacredSearchResult>> structuredSearch = CompletableFuture.supplyAsync(() -> jacredClient.search(request, false));
+        CompletableFuture<List<JacredSearchResult>> fallbackSearch = CompletableFuture.supplyAsync(() -> jacredClient.search(request, true));
+        try {
+            List<JacredSearchResult> rawResults = new ArrayList<>(structuredSearch.join());
+            try {
+                rawResults.addAll(fallbackSearch.join());
+            } catch (CompletionException completionException) {
+                logFallbackFailure(request, completionException);
+            }
+            return rawResults;
+        } catch (CompletionException completionException) {
+            Throwable cause = completionException.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw completionException;
+        }
+    }
+
+    private boolean shouldUseFallbackQuerySearch(TorrentSearchRequest request) {
+        String query = request.query() == null ? "" : request.query().trim();
+        if (query.length() < 2) {
+            return false;
+        }
+        long letterCount = query.chars().filter(Character::isLetter).count();
+        if (letterCount < 2) {
+            return false;
+        }
+        long technicalDelimiterCount = query.chars()
+                .filter(character -> character == '-' || character == '_' || character == '.')
+                .count();
+        boolean hasDigit = query.chars().anyMatch(Character::isDigit);
+        return technicalDelimiterCount < 2 || !hasDigit;
+    }
+
+    private List<JacredSearchResult> loadFallbackResults(TorrentSearchRequest request, int structuredResultCount) {
+        try {
+            return jacredClient.search(request, true);
+        } catch (RuntimeException runtimeException) {
+            log.warn("jacred_fallback_search_ignored: queryHash={}, structuredResultCount={}, error={}",
+                    SafeLog.sha256Short(request.query()), structuredResultCount, runtimeException.getMessage());
+            return List.of();
+        }
+    }
+
+    private void logFallbackFailure(TorrentSearchRequest request, CompletionException completionException) {
+        Throwable cause = completionException.getCause() == null ? completionException : completionException.getCause();
+        log.warn("jacred_fallback_search_ignored: queryHash={}, error={}",
+                SafeLog.sha256Short(request.query()), cause.getMessage());
+    }
+
+    private void cleanupExpiredSearchCache() {
+        Instant now = Instant.now();
+        searchCache.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
+    }
+
+    private String searchCacheKey(TorrentSearchRequest request, TorrentSearchFilters filters) {
+        TorrentSearchFilters safeFilters = filters == null ? TorrentSearchFilters.any() : filters;
+        return String.join("|",
+                normalizeCachePart(request.title()),
+                normalizeCachePart(request.originalTitle()),
+                String.valueOf(request.year()),
+                String.valueOf(request.serialType()),
+                normalizeCachePart(request.query()),
+                safeFilters.quality().code(),
+                safeFilters.voice().code(),
+                String.valueOf(safeFilters.seasonNumber()),
+                safeFilters.episodeNumbers().toString()
+        );
+    }
+
+    private String normalizeCachePart(String value) {
+        return value == null ? "" : value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
     public SearchPage searchFirstPage(String userText) {
@@ -487,6 +628,12 @@ public class TorrentSearchService {
 
     private String escapeJson(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private record CachedSearchResults(List<TorrentSearchResult> results, Instant expiresAt) {
+    }
+
+    private record SearchLoadResult(List<TorrentSearchResult> results, int rawResultCount) {
     }
 
     public record SearchPage(

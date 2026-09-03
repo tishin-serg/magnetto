@@ -50,6 +50,9 @@ public class TelegramLlmCommandRouter {
             unknownMessageHandler.handle(chatId, text);
             return;
         }
+        if (routeFast(chatId, text)) {
+            return;
+        }
         UserDialogState state = userDialogStateRepository.find(chatId);
         LlmRouteResult routeResult = llmRouter.route(chatId, text, state);
         if (llmRouter.requiresFallback(routeResult, llmProperties.minConfidence())) {
@@ -66,6 +69,106 @@ public class TelegramLlmCommandRouter {
         }
         userDialogStateRepository.save(llmRouter.updateState(chatId, routeResult));
         dispatch(chatId, text, routeResult);
+    }
+
+    private boolean routeFast(Long chatId, String text) {
+        String trimmed = text == null ? "" : text.trim();
+        String normalized = trimmed.toLowerCase();
+        if (trimmed.isBlank()) {
+            legacyRouter.route(chatId, text);
+            return true;
+        }
+        if (isGreeting(normalized)) {
+            helpCommandHandler.handle(chatId, "/help");
+            return true;
+        }
+        if (containsAny(normalized, "задач", "статус", "процесс")) {
+            tasksCommandHandler.handle(chatId, "/tasks");
+            return true;
+        }
+        if (hasFreeSpaceIntent(normalized)) {
+            telegramMessageService.sendTextWithInlineKeyboard(
+                    chatId,
+                    menuCallbackHandler.diskSpaceText(),
+                    telegramKeyboardFactory.backToMenuKeyboard()
+            );
+            return true;
+        }
+        if (containsAny(normalized, "очист")) {
+            telegramMessageService.sendTextWithInlineKeyboard(
+                    chatId,
+                    mediaCleanupCallbackHandler.cleanupAskText(),
+                    telegramKeyboardFactory.cleanupConfirmKeyboard()
+            );
+            return true;
+        }
+        if (containsAny(normalized, "медиатек", "библиотек", "скачан")) {
+            libraryCommandHandler.handle(chatId, "/library");
+            return true;
+        }
+        if (containsAny(normalized, "настрой")) {
+            settingsCommandHandler.handle(chatId, "/settings");
+            return true;
+        }
+        if (containsAny(normalized, "помощ", "инструкц", "iphone", "айфон")) {
+            helpCommandHandler.handle(chatId, "/help");
+            return true;
+        }
+        String searchQuery = searchQueryFromText(trimmed, normalized);
+        if (!searchQuery.isBlank()) {
+            torrentSearchMessageHandler.handle(chatId, searchQuery);
+            return true;
+        }
+        return false;
+    }
+
+    private String searchQueryFromText(String trimmed, String normalized) {
+        String[] prefixes = {"поиск ", "найди ", "найти ", "ищи ", "скачай ", "скачать ", "фильм ", "сериал "};
+        for (String prefix : prefixes) {
+            if (normalized.startsWith(prefix)) {
+                return trimmed.substring(prefix.length()).trim();
+            }
+        }
+        if (looksLikeTitle(trimmed)) {
+            return trimmed;
+        }
+        return "";
+    }
+
+    private boolean looksLikeTitle(String text) {
+        if (text.length() < 2 || text.length() > 100 || text.contains("?")) {
+            return false;
+        }
+        int words = text.trim().split("\\s+").length;
+        if (words > 8) {
+            return false;
+        }
+        return text.chars().anyMatch(Character::isLetterOrDigit);
+    }
+
+    private boolean hasFreeSpaceIntent(String normalized) {
+        return normalized.contains("свобод")
+                || normalized.contains("место на диск")
+                || normalized.contains("места на диск")
+                || normalized.contains("сколько места")
+                || normalized.equals("диск");
+    }
+
+    private boolean containsAny(String value, String... fragments) {
+        for (String fragment : fragments) {
+            if (value.contains(fragment)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isGreeting(String normalized) {
+        return normalized.equals("привет")
+                || normalized.equals("старт")
+                || normalized.equals("start")
+                || normalized.equals("меню")
+                || normalized.equals("/start");
     }
 
     private boolean isLegacyText(String text) {

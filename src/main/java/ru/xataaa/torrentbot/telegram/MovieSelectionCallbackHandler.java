@@ -137,6 +137,7 @@ public class MovieSelectionCallbackHandler implements TelegramCallbackHandler {
         }
         MovieSearchSession session = movieSearchSessionService.create(movieMetadata);
         telegramMessageService.answerCallbackQuery(callbackQueryId, "Ищу сезоны и раздачи");
+        telegramMessageService.sendTyping(chatId);
         render(chatId, messageId, "Ищу сезоны и доступные раздачи...\nЭто может занять до 10 секунд.", null);
         log.info("movie_filter_opened: chatId={}, searchSessionId={}, tmdbId={}, type={}, title={}, year={}",
                 chatId,
@@ -158,6 +159,7 @@ public class MovieSelectionCallbackHandler implements TelegramCallbackHandler {
             return;
         }
         telegramMessageService.answerCallbackQuery(callbackQueryId, "Ищу раздачи");
+        telegramMessageService.sendTyping(chatId);
         render(chatId, messageId, "Ищу подходящие раздачи во внешнем поиске...\nЕсли источник отвечает медленно, это может занять несколько секунд.", null);
         log.info("movie_releases_search_started: chatId={}, searchSessionId={}, tmdbId={}, mediaType={}, quality={}, voice={}, season={}, episodes={}",
                 chatId,
