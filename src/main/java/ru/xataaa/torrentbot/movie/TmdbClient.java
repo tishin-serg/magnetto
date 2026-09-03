@@ -8,6 +8,7 @@ import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 import ru.xataaa.torrentbot.common.ErrorCode;
 import ru.xataaa.torrentbot.common.SafeLog;
 import ru.xataaa.torrentbot.config.TmdbProperties;
@@ -42,7 +43,7 @@ public class TmdbClient {
         long startedAt = System.nanoTime();
         log.info("tmdb_search_started: queryHash={}, queryPreview={}", queryHash, SafeLog.preview(query, 40));
         try {
-            TmdbSearchResponse response = webClient.get()
+            Mono<TmdbSearchResponse> responseMono = webClient.get()
                     .uri(uriBuilder -> uriBuilder.path("/search/multi")
                             .queryParamIfPresent("api_key", bearerToken ? java.util.Optional.empty() : java.util.Optional.of(apiCredential))
                             .queryParam("language", tmdbProperties.language())
@@ -55,9 +56,8 @@ public class TmdbClient {
                         }
                     })
                     .retrieve()
-                    .bodyToMono(TmdbSearchResponse.class)
-                    .timeout(Duration.ofMillis(tmdbProperties.requestTimeoutMs()))
-                    .block();
+                    .bodyToMono(TmdbSearchResponse.class);
+            TmdbSearchResponse response = blockWithinRequestTimeout(responseMono);
             List<TmdbSearchResponse.TmdbSearchResult> results = response == null || response.getResults() == null
                     ? List.of()
                     : response.getResults();
@@ -153,7 +153,7 @@ public class TmdbClient {
         }
         String apiCredential = tmdbProperties.apiKey().trim();
         boolean bearerToken = isBearerToken(apiCredential);
-        return webClient.get()
+        Mono<T> responseMono = webClient.get()
                 .uri(uriBuilder -> uriBuilder.path(path)
                         .queryParamIfPresent("api_key", bearerToken ? java.util.Optional.empty() : java.util.Optional.of(apiCredential))
                         .queryParam("language", tmdbProperties.language())
@@ -164,9 +164,15 @@ public class TmdbClient {
                     }
                 })
                 .retrieve()
-                .bodyToMono(responseType)
-                .timeout(Duration.ofMillis(tmdbProperties.requestTimeoutMs()))
-                .block();
+                .bodyToMono(responseType);
+        return blockWithinRequestTimeout(responseMono);
+    }
+
+    private <T> T blockWithinRequestTimeout(Mono<T> responseMono) {
+        Duration timeout = Duration.ofMillis(tmdbProperties.requestTimeoutMs());
+        return responseMono
+                .timeout(timeout)
+                .block(timeout.plusMillis(500L));
     }
 
     private String trimTrailingSlash(String value) {

@@ -8,8 +8,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,26 +37,34 @@ public class MovieMetadataService {
         }
         cleanupExpiredEntries();
         String queryHash = SafeLog.sha256Short(normalizedQuery);
-        CacheEntry cacheEntry = queryCache.get(normalizedQuery.toLowerCase());
-        if (cacheEntry != null && cacheEntry.expiresAt().isAfter(Instant.now())) {
+        Optional<List<MovieMetadata>> cachedResults = findCached(normalizedQuery);
+        if (cachedResults.isPresent()) {
             meterRegistry.counter("tmdb.cache.hit", "source", "tmdb", "result", "success").increment();
-            log.info("tmdb_cache_hit: queryHash={}, resultCount={}", queryHash, cacheEntry.results().size());
-            return cacheEntry.results();
+            log.info("tmdb_cache_hit: queryHash={}, resultCount={}", queryHash, cachedResults.get().size());
+            return cachedResults.get();
         }
         meterRegistry.counter("tmdb.cache.miss", "source", "tmdb", "result", "success").increment();
         log.info("tmdb_cache_miss: queryHash={}", queryHash);
+        String cacheKey = normalizedQuery.toLowerCase();
         CompletableFuture<List<MovieMetadata>> currentSearch = new CompletableFuture<>();
-        CompletableFuture<List<MovieMetadata>> existingSearch = inFlightSearches.putIfAbsent(normalizedQuery.toLowerCase(), currentSearch);
+        CompletableFuture<List<MovieMetadata>> existingSearch = inFlightSearches.putIfAbsent(cacheKey, currentSearch);
         if (existingSearch != null) {
-            log.info("tmdb_singleflight_wait: queryHash={}", queryHash);
+            long waitTimeoutMs = Math.max(250L, tmdbProperties.requestTimeoutMs() + 250L);
+            log.info("tmdb_singleflight_wait: queryHash={}, timeoutMs={}", queryHash, waitTimeoutMs);
             try {
-                return existingSearch.join();
-            } catch (CompletionException completionException) {
-                Throwable cause = completionException.getCause();
+                return existingSearch.get(waitTimeoutMs, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException timeoutException) {
+                log.warn("tmdb_singleflight_timeout: queryHash={}, timeoutMs={}", queryHash, waitTimeoutMs);
+                throw new IllegalStateException("TMDb search is still running", timeoutException);
+            } catch (InterruptedException interruptedException) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("TMDb search wait interrupted", interruptedException);
+            } catch (ExecutionException executionException) {
+                Throwable cause = executionException.getCause();
                 if (cause instanceof RuntimeException runtimeException) {
                     throw runtimeException;
                 }
-                throw completionException;
+                throw new IllegalStateException("TMDb search failed", executionException);
             }
         }
         try {
@@ -65,8 +75,22 @@ public class MovieMetadataService {
             currentSearch.completeExceptionally(runtimeException);
             throw runtimeException;
         } finally {
-            inFlightSearches.remove(normalizedQuery.toLowerCase(), currentSearch);
+            inFlightSearches.remove(cacheKey, currentSearch);
         }
+    }
+
+    public Optional<List<MovieMetadata>> findCached(String query) {
+        String normalizedQuery = normalizeQuery(query);
+        if (normalizedQuery.length() < 2) {
+            return Optional.empty();
+        }
+        cleanupExpiredEntries();
+        CacheEntry cacheEntry = queryCache.get(normalizedQuery.toLowerCase());
+        if (cacheEntry == null || cacheEntry.expiresAt().isBefore(Instant.now())) {
+            queryCache.remove(normalizedQuery.toLowerCase());
+            return Optional.empty();
+        }
+        return Optional.of(cacheEntry.results());
     }
 
     private List<MovieMetadata> searchExternalAndCache(String normalizedQuery, String queryHash) {
