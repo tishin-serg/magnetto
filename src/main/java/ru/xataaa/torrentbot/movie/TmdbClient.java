@@ -56,7 +56,8 @@ public class TmdbClient {
                     })
                     .retrieve()
                     .bodyToMono(TmdbSearchResponse.class)
-                    .block(Duration.ofMillis(tmdbProperties.requestTimeoutMs()));
+                    .timeout(Duration.ofMillis(tmdbProperties.requestTimeoutMs()))
+                    .block();
             List<TmdbSearchResponse.TmdbSearchResult> results = response == null || response.getResults() == null
                     ? List.of()
                     : response.getResults();
@@ -164,7 +165,8 @@ public class TmdbClient {
                 })
                 .retrieve()
                 .bodyToMono(responseType)
-                .block(Duration.ofMillis(tmdbProperties.requestTimeoutMs()));
+                .timeout(Duration.ofMillis(tmdbProperties.requestTimeoutMs()))
+                .block();
     }
 
     private String trimTrailingSlash(String value) {
