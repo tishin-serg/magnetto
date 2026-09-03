@@ -182,7 +182,7 @@ public class TorrentSearchService {
         if (!filters.hasSpecificFilters()) {
             List<JacredSearchResult> rawResults = new ArrayList<>(jacredClient.search(request, false));
             if (rawResults.size() < 3) {
-                rawResults.addAll(jacredClient.search(request, true));
+                rawResults.addAll(loadFallbackResults(request, rawResults.size()));
             }
             return rawResults;
         }
@@ -190,7 +190,11 @@ public class TorrentSearchService {
         CompletableFuture<List<JacredSearchResult>> fallbackSearch = CompletableFuture.supplyAsync(() -> jacredClient.search(request, true));
         try {
             List<JacredSearchResult> rawResults = new ArrayList<>(structuredSearch.join());
-            rawResults.addAll(fallbackSearch.join());
+            try {
+                rawResults.addAll(fallbackSearch.join());
+            } catch (CompletionException completionException) {
+                logFallbackFailure(request, completionException);
+            }
             return rawResults;
         } catch (CompletionException completionException) {
             Throwable cause = completionException.getCause();
@@ -199,6 +203,22 @@ public class TorrentSearchService {
             }
             throw completionException;
         }
+    }
+
+    private List<JacredSearchResult> loadFallbackResults(TorrentSearchRequest request, int structuredResultCount) {
+        try {
+            return jacredClient.search(request, true);
+        } catch (RuntimeException runtimeException) {
+            log.warn("jacred_fallback_search_ignored: queryHash={}, structuredResultCount={}, error={}",
+                    SafeLog.sha256Short(request.query()), structuredResultCount, runtimeException.getMessage());
+            return List.of();
+        }
+    }
+
+    private void logFallbackFailure(TorrentSearchRequest request, CompletionException completionException) {
+        Throwable cause = completionException.getCause() == null ? completionException : completionException.getCause();
+        log.warn("jacred_fallback_search_ignored: queryHash={}, error={}",
+                SafeLog.sha256Short(request.query()), cause.getMessage());
     }
 
     private void cleanupExpiredSearchCache() {

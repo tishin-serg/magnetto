@@ -8,6 +8,7 @@ public record JacredProperties(
         String apiKey,
         int connectTimeoutMs,
         int requestTimeoutMs,
+        int fallbackRequestTimeoutMs,
         int maxResults
 ) {
     public boolean enabled() {

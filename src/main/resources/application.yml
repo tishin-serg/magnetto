@@ -47,6 +47,7 @@ jacred:
   api-key: ${JACRED_API_KEY:}
   connect-timeout-ms: ${JACRED_CONNECT_TIMEOUT_MS:5000}
   request-timeout-ms: ${JACRED_REQUEST_TIMEOUT_MS:8000}
+  fallback-request-timeout-ms: ${JACRED_FALLBACK_REQUEST_TIMEOUT_MS:2500}
   max-results: ${JACRED_MAX_RESULTS:5}
 
 tmdb:
