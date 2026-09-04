@@ -54,7 +54,7 @@ services:
         condition: service_started
     environment:
       TZ: Europe/Moscow
-      JAVA_TOOL_OPTIONS: -Duser.timezone=Europe/Moscow -Djava.net.preferIPv4Stack=true
+      JAVA_TOOL_OPTIONS: -Duser.timezone=Europe/Moscow -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
       TELEGRAM_BASE_URL: ${TELEGRAM_BASE_URL:-https://api.telegram.org}
