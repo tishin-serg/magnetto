@@ -4,13 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.xataaa.torrentbot.common.ErrorCode;
@@ -151,45 +148,72 @@ public class TmdbClient {
         List<QueryParam> allParams = bearerToken
                 ? queryParams
                 : concat(queryParams, param("api_key", apiCredential));
-        HttpURLConnection connection = null;
+        Process process = null;
         try {
-            URL url = uri(path, allParams).toURL();
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(tmdbProperties.connectTimeoutMs());
-            connection.setReadTimeout(tmdbProperties.requestTimeoutMs());
-            connection.setRequestProperty("Accept", "application/json");
-            if (bearerToken) {
-                connection.setRequestProperty("Authorization", "Bearer " + apiCredential);
+            process = new ProcessBuilder(
+                    "curl",
+                    "-4",
+                    "--silent",
+                    "--show-error",
+                    "--fail-with-body",
+                    "--connect-timeout",
+                    timeoutSeconds(tmdbProperties.connectTimeoutMs()),
+                    "--max-time",
+                    timeoutSeconds(tmdbProperties.requestTimeoutMs()),
+                    "--config",
+                    "-"
+            ).redirectErrorStream(true).start();
+            try (var input = process.getOutputStream()) {
+                input.write(curlConfig(path, allParams, bearerToken, apiCredential)
+                        .getBytes(StandardCharsets.UTF_8));
             }
-
-            int statusCode = connection.getResponseCode();
-            if (statusCode < 200 || statusCode >= 300) {
-                throw new IllegalStateException("TMDb HTTP status " + statusCode);
+            byte[] response = process.getInputStream().readAllBytes();
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IllegalStateException("TMDb curl exit code " + exitCode + ": "
+                        + SafeLog.preview(new String(response, StandardCharsets.UTF_8), 160));
             }
-            return objectMapper.readValue(connection.getInputStream(), responseType);
+            return objectMapper.readValue(response, responseType);
         } catch (IOException ioException) {
             throw new IllegalStateException("TMDb request failed", ioException);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("TMDb request interrupted", interruptedException);
         } finally {
-            if (connection != null) {
-                connection.disconnect();
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
             }
         }
     }
 
-    private URI uri(String path, List<QueryParam> queryParams) {
-        StringBuilder uri = new StringBuilder(trimTrailingSlash(tmdbProperties.baseUrl())).append(path);
-        if (!queryParams.isEmpty()) {
-            uri.append('?');
-            for (int index = 0; index < queryParams.size(); index++) {
-                if (index > 0) {
-                    uri.append('&');
-                }
-                QueryParam param = queryParams.get(index);
-                uri.append(encode(param.name())).append('=').append(encode(param.value()));
-            }
+    private String curlConfig(String path, List<QueryParam> queryParams, boolean bearerToken, String apiCredential) {
+        StringBuilder config = new StringBuilder()
+                .append("url = \"")
+                .append(curlConfigValue(trimTrailingSlash(tmdbProperties.baseUrl()) + path))
+                .append("\"\nget\n")
+                .append("header = \"Accept: application/json\"\n");
+        if (bearerToken) {
+            config.append("header = \"Authorization: Bearer ")
+                    .append(curlConfigValue(apiCredential))
+                    .append("\"\n");
         }
-        return URI.create(uri.toString());
+        for (QueryParam queryParam : queryParams) {
+            config.append("data-urlencode = \"")
+                    .append(curlConfigValue(queryParam.name() + "=" + queryParam.value()))
+                    .append("\"\n");
+        }
+        return config.toString();
+    }
+
+    private String curlConfigValue(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace('\r', ' ')
+                .replace('\n', ' ');
+    }
+
+    private String timeoutSeconds(int timeoutMs) {
+        return String.format(Locale.ROOT, "%.3f", Math.max(1, timeoutMs) / 1_000.0d);
     }
 
     private List<QueryParam> concat(List<QueryParam> first, QueryParam second) {
@@ -198,10 +222,6 @@ public class TmdbClient {
 
     private QueryParam param(String name, Object value) {
         return new QueryParam(name, value == null ? "" : value.toString());
-    }
-
-    private String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private String trimTrailingSlash(String value) {
