@@ -64,7 +64,8 @@ public class TmdbClient {
             long durationMs = (System.nanoTime() - startedAt) / 1_000_000L;
             sample.stop(timer("error", "error"));
             meterRegistry.counter("search.error", "source", "tmdb", "result", "error").increment();
-            log.warn("tmdb_search_failed: queryHash={}, durationMs={}, error={}", queryHash, durationMs, runtimeException.getMessage());
+            log.warn("tmdb_search_failed: queryHash={}, durationMs={}, error={}, cause={}",
+                    queryHash, durationMs, runtimeException.getMessage(), rootCause(runtimeException));
             throw new RetryableOperationException(ErrorCode.UNKNOWN_ERROR, "TMDb search failed", runtimeException);
         }
     }
@@ -103,7 +104,8 @@ public class TmdbClient {
                     .tag("result", "error")
                     .tag("type", "tv_seasons")
                     .register(meterRegistry));
-            log.warn("tmdb_tv_seasons_failed: tmdbIdHash={}, durationMs={}, error={}", tmdbIdHash, durationMs, runtimeException.getMessage());
+            log.warn("tmdb_tv_seasons_failed: tmdbIdHash={}, durationMs={}, error={}, cause={}",
+                    tmdbIdHash, durationMs, runtimeException.getMessage(), rootCause(runtimeException));
             throw runtimeException;
         }
     }
@@ -133,7 +135,8 @@ public class TmdbClient {
                     .tag("result", "error")
                     .tag("type", "tv_season")
                     .register(meterRegistry));
-            log.warn("tmdb_tv_season_failed: tmdbIdHash={}, season={}, durationMs={}, error={}", tmdbIdHash, seasonNumber, durationMs, runtimeException.getMessage());
+            log.warn("tmdb_tv_season_failed: tmdbIdHash={}, season={}, durationMs={}, error={}, cause={}",
+                    tmdbIdHash, seasonNumber, durationMs, runtimeException.getMessage(), rootCause(runtimeException));
             throw runtimeException;
         }
     }
@@ -212,6 +215,18 @@ public class TmdbClient {
 
     private boolean isBearerToken(String apiCredential) {
         return apiCredential.startsWith("eyJ") || apiCredential.length() > 80;
+    }
+
+    private String rootCause(Throwable throwable) {
+        Throwable cause = throwable;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        String message = cause.getMessage();
+        if (message == null || message.isBlank()) {
+            return cause.getClass().getSimpleName();
+        }
+        return cause.getClass().getSimpleName() + ": " + SafeLog.preview(message, 160);
     }
 
     private record QueryParam(String name, String value) {
