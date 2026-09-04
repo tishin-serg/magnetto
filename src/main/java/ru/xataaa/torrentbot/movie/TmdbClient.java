@@ -4,13 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
@@ -27,16 +25,11 @@ public class TmdbClient {
     private final TmdbProperties tmdbProperties;
     private final MeterRegistry meterRegistry;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
 
     public TmdbClient(TmdbProperties tmdbProperties, MeterRegistry meterRegistry, ObjectMapper objectMapper) {
         this.tmdbProperties = tmdbProperties;
         this.meterRegistry = meterRegistry;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(tmdbProperties.connectTimeoutMs()))
-                .version(HttpClient.Version.HTTP_1_1)
-                .build();
     }
 
     public List<TmdbSearchResponse.TmdbSearchResult> searchMulti(String query) {
@@ -158,24 +151,29 @@ public class TmdbClient {
         List<QueryParam> allParams = bearerToken
                 ? queryParams
                 : concat(queryParams, param("api_key", apiCredential));
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(uri(path, allParams))
-                .timeout(Duration.ofMillis(tmdbProperties.requestTimeoutMs()))
-                .GET();
-        if (bearerToken) {
-            requestBuilder.header("Authorization", "Bearer " + apiCredential);
-        }
-        HttpRequest request = requestBuilder.build();
+        HttpURLConnection connection = null;
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("TMDb HTTP status " + response.statusCode());
+            URL url = uri(path, allParams).toURL();
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(tmdbProperties.connectTimeoutMs());
+            connection.setReadTimeout(tmdbProperties.requestTimeoutMs());
+            connection.setRequestProperty("Accept", "application/json");
+            if (bearerToken) {
+                connection.setRequestProperty("Authorization", "Bearer " + apiCredential);
             }
-            return objectMapper.readValue(response.body(), responseType);
+
+            int statusCode = connection.getResponseCode();
+            if (statusCode < 200 || statusCode >= 300) {
+                throw new IllegalStateException("TMDb HTTP status " + statusCode);
+            }
+            return objectMapper.readValue(connection.getInputStream(), responseType);
         } catch (IOException ioException) {
             throw new IllegalStateException("TMDb request failed", ioException);
-        } catch (InterruptedException interruptedException) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("TMDb request interrupted", interruptedException);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 
