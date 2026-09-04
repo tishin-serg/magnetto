@@ -47,6 +47,8 @@ services:
 
   bot-app:
     build: .
+    mem_limit: 384m
+    memswap_limit: 384m
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,7 +56,7 @@ services:
         condition: service_started
     environment:
       TZ: Europe/Moscow
-      JAVA_TOOL_OPTIONS: -Duser.timezone=Europe/Moscow -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx160m -Duser.timezone=Europe/Moscow -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
       TELEGRAM_BASE_URL: ${TELEGRAM_BASE_URL:-https://api.telegram.org}
