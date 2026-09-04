@@ -56,7 +56,7 @@ tmdb:
   image-base-url: ${TMDB_IMAGE_BASE_URL:https://image.tmdb.org/t/p/w185}
   language: ${TMDB_LANGUAGE:ru-RU}
   connect-timeout-ms: ${TMDB_CONNECT_TIMEOUT_MS:1000}
-  request-timeout-ms: ${TMDB_REQUEST_TIMEOUT_MS:3000}
+  request-timeout-ms: ${TMDB_REQUEST_TIMEOUT_MS:2000}
   cache-ttl-minutes: ${TMDB_CACHE_TTL_MINUTES:360}
   details-cache-ttl-minutes: ${TMDB_DETAILS_CACHE_TTL_MINUTES:1440}
   max-inline-results: ${TMDB_MAX_INLINE_RESULTS:10}

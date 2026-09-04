@@ -3,12 +3,12 @@ package ru.xataaa.torrentbot.movie;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.reactive.function.client.WebClient;
 import ru.xataaa.torrentbot.config.TmdbProperties;
 import ru.xataaa.torrentbot.retry.RetryableOperationException;
 
@@ -34,7 +34,7 @@ class TmdbClientTest {
             TmdbClient client = new TmdbClient(
                     new TmdbProperties("key", "http://127.0.0.1:" + server.getAddress().getPort(), "http://img", "ru-RU", 100, 200, 60, 1440, 10),
                     new SimpleMeterRegistry(),
-                    WebClient.builder()
+                    new ObjectMapper()
             );
 
             long startedAt = System.nanoTime();
