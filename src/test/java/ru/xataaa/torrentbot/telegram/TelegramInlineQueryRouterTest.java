@@ -1,8 +1,6 @@
 package ru.xataaa.torrentbot.telegram;
 
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -32,15 +30,28 @@ class TelegramInlineQueryRouterTest {
     );
 
     @Test
-    void shouldAnswerInlineQueryFastAndWarmTmdbCacheWhenCacheMiss() {
+    void shouldAnswerInlineQueryWithTmdbResultsWhenCacheMiss() {
+        MovieMetadata movie = new MovieMetadata(
+                "selection-1",
+                "19995",
+                MovieMediaType.MOVIE,
+                "Аватар",
+                "Avatar",
+                2009,
+                7.6,
+                "",
+                ""
+        );
+        List<MovieMetadata> movies = List.of(movie);
         when(movieMetadataService.findCached("Аватар")).thenReturn(Optional.empty());
+        when(movieMetadataService.search("Аватар")).thenReturn(movies);
+        when(telegramInlineResultFactory.movieResults(movies)).thenReturn("[{\"id\":\"selection-1\"}]");
 
         router.route("inline-1", 42L, " Аватар ");
 
-        verify(telegramMessageService).answerInlineQuery("inline-1", "[]", 1);
-        verify(movieMetadataService).warmCache("Аватар");
-        verify(movieMetadataService, never()).search("Аватар");
-        verifyNoInteractions(telegramInlineResultFactory);
+        verify(movieMetadataService).search("Аватар");
+        verify(telegramInlineResultFactory).movieResults(movies);
+        verify(telegramMessageService).answerInlineQuery("inline-1", "[{\"id\":\"selection-1\"}]", 30);
     }
 
     @Test
@@ -62,9 +73,9 @@ class TelegramInlineQueryRouterTest {
 
         router.route("inline-2", 42L, "Аватар");
 
+        verify(movieMetadataService).findCached("Аватар");
         verify(telegramInlineResultFactory).movieResults(cachedMovies);
         verify(telegramMessageService).answerInlineQuery("inline-2", "[{\"id\":\"selection-1\"}]", 30);
-        verify(movieMetadataService, never()).warmCache("Аватар");
-        verify(movieMetadataService, never()).search("Аватар");
+        org.mockito.Mockito.verifyNoMoreInteractions(movieMetadataService);
     }
 }

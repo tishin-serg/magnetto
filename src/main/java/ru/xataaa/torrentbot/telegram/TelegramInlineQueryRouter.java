@@ -69,11 +69,8 @@ public class TelegramInlineQueryRouter {
                     movies = cachedMovies.get();
                     result = movies.isEmpty() ? "empty" : "success";
                 } else {
-                    result = "deferred";
-                    telegramMessageService.answerInlineQuery(inlineQueryId, "[]", 1);
-                    log.info("inline_answer_sent: userId={}, queryHash={}, resultCount=0, deferredTmdb=true", userId, queryHash);
-                    movieMetadataService.warmCache(normalizedQuery);
-                    return;
+                    movies = movieMetadataService.search(normalizedQuery);
+                    result = movies.isEmpty() ? "empty" : "success";
                 }
             }
             if (isStale(userKey, inlineQueryId)) {
