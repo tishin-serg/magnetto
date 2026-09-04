@@ -64,8 +64,17 @@ public class TelegramInlineQueryRouter {
                 return;
             }
             if (normalizedQuery.length() >= 2) {
-                movies = movieMetadataService.search(normalizedQuery);
-                result = movies.isEmpty() ? "empty" : "success";
+                var cachedMovies = movieMetadataService.findCached(normalizedQuery);
+                if (cachedMovies.isPresent()) {
+                    movies = cachedMovies.get();
+                    result = movies.isEmpty() ? "empty" : "success";
+                } else {
+                    result = "deferred";
+                    telegramMessageService.answerInlineQuery(inlineQueryId, "[]", 1);
+                    log.info("inline_answer_sent: userId={}, queryHash={}, resultCount=0, deferredTmdb=true", userId, queryHash);
+                    movieMetadataService.warmCache(normalizedQuery);
+                    return;
+                }
             }
             if (isStale(userKey, inlineQueryId)) {
                 log.info("inline_query_skipped_stale_after_search: userId={}, queryHash={}", userId, queryHash);

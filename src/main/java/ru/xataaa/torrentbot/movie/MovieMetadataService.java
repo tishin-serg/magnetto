@@ -79,6 +79,21 @@ public class MovieMetadataService {
         }
     }
 
+    public void warmCache(String query) {
+        String normalizedQuery = normalizeQuery(query);
+        if (normalizedQuery.length() < 2 || findCached(normalizedQuery).isPresent()) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            try {
+                search(normalizedQuery);
+            } catch (RuntimeException runtimeException) {
+                log.debug("TMDb cache warmup skipped: queryHash={}, error={}",
+                        SafeLog.sha256Short(normalizedQuery), runtimeException.getMessage());
+            }
+        });
+    }
+
     public Optional<List<MovieMetadata>> findCached(String query) {
         String normalizedQuery = normalizeQuery(query);
         if (normalizedQuery.length() < 2) {
