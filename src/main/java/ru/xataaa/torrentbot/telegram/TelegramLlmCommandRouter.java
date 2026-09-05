@@ -176,7 +176,10 @@ public class TelegramLlmCommandRouter {
             return true;
         }
         String trimmed = text.trim();
-        return trimmed.startsWith("/") || trimmed.startsWith("magnet:");
+        return trimmed.startsWith("/")
+                || trimmed.startsWith("magnet:")
+                || trimmed.startsWith("Выбран фильм:")
+                || trimmed.startsWith("Выбран сериал:");
     }
 
     private void dispatch(Long chatId, String originalText, LlmRouteResult routeResult) {

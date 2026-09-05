@@ -58,13 +58,36 @@ class TelegramLlmCommandRouterFastPathTest {
         verify(llmRouter, never()).route(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
     }
 
+    @Test
+    void shouldIgnoreInlineMovieSelectionWithoutLlmOrDuplicateSearch() {
+        LlmRouter llmRouter = mock(LlmRouter.class);
+        TelegramCommandRouter legacyRouter = mock(TelegramCommandRouter.class);
+        TorrentSearchMessageHandler torrentSearchMessageHandler = mock(TorrentSearchMessageHandler.class);
+        TelegramLlmCommandRouter router = router(llmRouter, legacyRouter, torrentSearchMessageHandler);
+        String selection = "Выбран фильм:\n\nУльтиматум Борна / The Bourne Ultimatum (2007)";
+
+        router.route(42L, selection);
+
+        verify(legacyRouter).route(42L, selection);
+        verify(torrentSearchMessageHandler, never()).handle(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString());
+        verify(llmRouter, never()).route(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+    }
+
     private TelegramLlmCommandRouter router(LlmRouter llmRouter, TorrentSearchMessageHandler torrentSearchMessageHandler) {
+        return router(llmRouter, mock(TelegramCommandRouter.class), torrentSearchMessageHandler);
+    }
+
+    private TelegramLlmCommandRouter router(
+            LlmRouter llmRouter,
+            TelegramCommandRouter legacyRouter,
+            TorrentSearchMessageHandler torrentSearchMessageHandler
+    ) {
         return new TelegramLlmCommandRouter(
                 new LlmProperties(true, "http://ollama", "model", 30, 0.6),
                 new AppProperties(100, 100, 100, "", true, 30, 24, 3, 30, 48),
                 llmRouter,
                 mock(UserDialogStateRepository.class),
-                mock(TelegramCommandRouter.class),
+                legacyRouter,
                 torrentSearchMessageHandler,
                 mock(TasksCommandHandler.class),
                 mock(LibraryCommandHandler.class),
