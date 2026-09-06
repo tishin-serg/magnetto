@@ -19,6 +19,7 @@ public class TaskOverviewService {
 
     private final DownloadJobRepository downloadJobRepository;
     private final TimeProvider timeProvider;
+    private final ru.xataaa.torrentbot.job.DownloadTelemetry downloadTelemetry;
 
     public String text() {
         List<DownloadJob> jobs = downloadJobRepository.findRecent(MAX_JOBS_IN_OVERVIEW);
@@ -40,6 +41,7 @@ public class TaskOverviewService {
                     .append("Куда: ")
                     .append(targetLabel(job.getDownloadTarget()))
                     .append("\n");
+            text.append(statistics(job));
             if (job.getNextRetryAt() != null && job.getStatus() == DownloadJobStatus.RETRY_WAITING) {
                 text.append("Следующая попытка: ")
                         .append(timeProvider.formatTime(job.getNextRetryAt()))
@@ -83,6 +85,35 @@ public class TaskOverviewService {
         keyboard.append("[{\"text\":\"🔎 Поиск\",\"callback_data\":\"menu:search\"}],");
         keyboard.append("[{\"text\":\"🏠 Главное меню\",\"callback_data\":\"menu:home\"}]]}");
         return keyboard.toString();
+    }
+
+    private String statistics(DownloadJob job) {
+        var snapshot = downloadTelemetry.get(job.getId());
+        boolean active = job.getStatus() == DownloadJobStatus.DOWNLOADING;
+        if (snapshot == null) return active ? "Статистика пока недоступна · обнови чуть позже\n" : "";
+        var sizes = new ru.xataaa.torrentbot.common.FileSizeFormatter();
+        String result = snapshot.size() > 0 ? "Выбрано: " + sizes.format(snapshot.size()) + "\n" : "";
+        if (!active) return result;
+        int percent = (int) Math.floor(snapshot.progress() * 100);
+        result = "Прогресс: " + percent + "%\n";
+        if (snapshot.size() > 0) result += "Скачано ≈ " + sizes.format((long) (snapshot.size() * snapshot.progress()))
+                + " из " + sizes.format(snapshot.size()) + "\n";
+        if (snapshot.observedAt().isBefore(java.time.Instant.now().minusSeconds(60))) {
+            return result + "Данные устарели · загрузчик не обновил статистику\n";
+        }
+        result += "Скорость: " + sizes.format(snapshot.speed()) + "/с\n";
+        result += "Осталось: " + (snapshot.eta() > 0 && snapshot.eta() < 8640000 && snapshot.speed() > 0
+                ? Math.max(1, snapshot.eta() / 60) + " мин" : "пока неизвестно") + "\n";
+        result += switch (snapshot.state() == null ? "" : snapshot.state()) {
+            case "stalledDL" -> "Ожидание источников\n";
+            case "stalledUP", "uploading" -> "Загрузчик не скачивает · проверь выбранные файлы\n";
+            case "pausedDL", "stoppedDL" -> "Остановлено в загрузчике\n";
+            case "queuedDL" -> "В очереди загрузчика\n";
+            case "checkingDL", "checkingUP", "checkingResumeData" -> "Проверяются файлы\n";
+            case "error", "missingFiles" -> "Ошибка загрузчика · проверь файлы и свободное место\n";
+            default -> "";
+        };
+        return result;
     }
 
     private boolean isControllable(DownloadJobStatus status) {

@@ -39,7 +39,7 @@ import ru.xataaa.torrentbot.retry.RetryableOperationException;
 public class HomeWebdavMediaLibraryService {
 
     private static final int MAX_RECURSION_DEPTH = 5;
-    private static final Set<String> VIDEO_EXTENSIONS = Set.of(".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm");
+    private static final Set<String> VIDEO_EXTENSIONS = Set.of(".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm", ".m2ts");
 
     private static final Pattern RESPONSE_PATTERN = Pattern.compile(
             "<(?:d:)?response[^>]*>(.*?)</(?:d:)?response>",
@@ -238,7 +238,7 @@ public class HomeWebdavMediaLibraryService {
 
     private String listDirectory(String directoryHref) {
         String responseBody = webClient().method(HttpMethod.valueOf("PROPFIND"))
-                .uri(encodeDirectoryHref(directoryHref))
+                .uri(java.net.URI.create(baseUrl()).resolve(encodeDirectoryHref(directoryHref)))
                 .header("Depth", "1")
                 .header(HttpHeaders.AUTHORIZATION, authorizationHeader())
                 .retrieve()
@@ -329,7 +329,8 @@ public class HomeWebdavMediaLibraryService {
         if (!matcher.find()) {
             return "";
         }
-        return matcher.group(1).trim();
+        return matcher.group(1).trim().replace("&lt;", "<").replace("&gt;", ">")
+                .replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&");
     }
 
     private long parseLong(String value) {

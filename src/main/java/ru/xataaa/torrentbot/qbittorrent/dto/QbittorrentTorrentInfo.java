@@ -14,6 +14,7 @@ public class QbittorrentTorrentInfo {
     private String tags;
     @JsonProperty("total_size")
     private long totalSize;
+    private long size;
     private long downloaded;
     @JsonProperty("amount_left")
     private long amountLeft;

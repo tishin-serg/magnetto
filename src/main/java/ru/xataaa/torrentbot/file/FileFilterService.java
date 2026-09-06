@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class FileFilterService {
 
-    private static final Set<String> VIDEO_EXTENSIONS = Set.of(".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm");
+    private static final Set<String> VIDEO_EXTENSIONS = Set.of(".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm", ".m2ts");
     private static final Set<String> BLOCKED_EXTENSIONS = Set.of(".nfo", ".txt", ".jpg", ".png", ".url", ".html", ".exe", ".bat", ".cmd", ".sh");
 
     public DownloadFileStatus classify(String fileName, long sizeBytes) {
