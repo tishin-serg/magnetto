@@ -15,7 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
 import ru.xataaa.torrentbot.config.QbittorrentProperties;
 import ru.xataaa.torrentbot.job.DownloadTarget;
+import ru.xataaa.torrentbot.regression.ApiRegression;
 
+@ApiRegression
 class QbittorrentClientTest {
 
     private final List<String> requestedPaths = new CopyOnWriteArrayList<>();

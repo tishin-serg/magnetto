@@ -11,8 +11,10 @@ import ru.xataaa.torrentbot.job.*;
 import ru.xataaa.torrentbot.media.S3MediaLibraryService;
 import ru.xataaa.torrentbot.movie.*;
 import ru.xataaa.torrentbot.preferences.*;
+import ru.xataaa.torrentbot.regression.UiRegression;
 import ru.xataaa.torrentbot.torrentsearch.*;
 
+@UiRegression
 class MovieDownloadConfirmationServiceTest {
     final ObjectMapper mapper = new ObjectMapper();
     final AppProperties app = mock(AppProperties.class);

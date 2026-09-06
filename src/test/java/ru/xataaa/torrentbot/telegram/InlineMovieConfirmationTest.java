@@ -3,6 +3,7 @@ package ru.xataaa.torrentbot.telegram;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import ru.xataaa.torrentbot.regression.UiRegression;
 import org.springframework.test.util.ReflectionTestUtils;
 import static org.mockito.Mockito.*;
 import ru.xataaa.torrentbot.telegram.dto.TelegramUpdate;
@@ -10,6 +11,7 @@ import ru.xataaa.torrentbot.movie.*;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import ru.xataaa.torrentbot.torrentsearch.*;
 
+@UiRegression
 class InlineMovieConfirmationTest {
     @Test void inlineMessageOpensMovieWithoutExtraButton() throws Exception {
         var api = mock(TelegramBotApiClient.class);

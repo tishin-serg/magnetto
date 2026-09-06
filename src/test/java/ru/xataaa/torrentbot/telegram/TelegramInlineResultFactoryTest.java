@@ -6,9 +6,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import ru.xataaa.torrentbot.regression.UiRegression;
 import ru.xataaa.torrentbot.movie.MovieMediaType;
 import ru.xataaa.torrentbot.movie.MovieMetadata;
 
+@UiRegression
 class TelegramInlineResultFactoryTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();

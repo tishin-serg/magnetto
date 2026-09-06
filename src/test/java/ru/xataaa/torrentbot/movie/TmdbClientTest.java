@@ -12,8 +12,10 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import ru.xataaa.torrentbot.config.TmdbProperties;
+import ru.xataaa.torrentbot.regression.ApiRegression;
 import ru.xataaa.torrentbot.retry.RetryableOperationException;
 
+@ApiRegression
 class TmdbClientTest {
 
     @Test

@@ -8,7 +8,9 @@ import static org.mockito.Mockito.verify;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import ru.xataaa.torrentbot.common.FileSizeFormatter;
+import ru.xataaa.torrentbot.regression.UiRegression;
 
+@UiRegression
 class DownloadTargetSelectionServiceTest {
 
     @Test
