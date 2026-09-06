@@ -46,6 +46,18 @@ public class MovieSelectionCallbackHandler implements TelegramCallbackHandler {
     private final TorrentAvailabilityService torrentAvailabilityService;
     private final TelegramMessageService telegramMessageService;
     private final MeterRegistry meterRegistry;
+    @org.springframework.beans.factory.annotation.Autowired
+    private MovieDownloadConfirmationService confirmations;
+    private final java.util.concurrent.ConcurrentHashMap<String, java.time.Instant> inlineSelections = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public void openFromInline(Long chatId, String selectionId) {
+        if (chatId == null || chatId <= 0) return;
+        java.time.Instant now = java.time.Instant.now();
+        inlineSelections.entrySet().removeIf(e -> e.getValue().isBefore(now));
+        String key = chatId + ":" + selectionId;
+        if (inlineSelections.putIfAbsent(key, now.plusSeconds(10)) == null)
+            handleOpen(null, chatId, null, selectionId);
+    }
 
     @Override
     public boolean supports(String data) {
@@ -129,14 +141,19 @@ public class MovieSelectionCallbackHandler implements TelegramCallbackHandler {
     private void handleOpen(String callbackQueryId, Long chatId, Long messageId, String selectionId) {
         MovieMetadata movieMetadata = movieMetadataService.findBySelectionId(selectionId).orElse(null);
         if (movieMetadata == null) {
-            telegramMessageService.answerCallbackQuery(callbackQueryId, "Карточка устарела");
+            if (callbackQueryId != null) telegramMessageService.answerCallbackQuery(callbackQueryId, "Карточка устарела");
             if (chatId != null) {
                 telegramMessageService.sendText(chatId, "Карточка фильма устарела. Повтори поиск ещё раз.");
             }
             return;
         }
+        if (!movieMetadata.isTv()) {
+            if (callbackQueryId != null) telegramMessageService.answerCallbackQuery(callbackQueryId, "Подбираю раздачу");
+            confirmations.open(chatId, messageId, movieMetadata);
+            return;
+        }
         MovieSearchSession session = movieSearchSessionService.create(movieMetadata);
-        telegramMessageService.answerCallbackQuery(callbackQueryId, "Ищу сезоны и раздачи");
+        if (callbackQueryId != null) telegramMessageService.answerCallbackQuery(callbackQueryId, "Ищу сезоны и раздачи");
         telegramMessageService.sendTyping(chatId);
         render(chatId, messageId, "Ищу сезоны и доступные раздачи...\nЭто может занять до 10 секунд.", null);
         log.info("movie_filter_opened: chatId={}, searchSessionId={}, tmdbId={}, type={}, title={}, year={}",

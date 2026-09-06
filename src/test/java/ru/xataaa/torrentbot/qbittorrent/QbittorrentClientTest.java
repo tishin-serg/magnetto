@@ -64,6 +64,22 @@ class QbittorrentClientTest {
         server.start();
     }
 
+    @Test
+    void guardedDownloadStopsAfterMetadata() throws Exception {
+        var requests = new CopyOnWriteArrayList<String>();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/api/v2/torrents/add", exchange -> {
+            requests.add(new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        server.start();
+        client().addMagnet(DownloadTarget.VPS, "magnet:?xt=urn:btih:abc", "/downloads", "job:1", true);
+        client().addMagnet(DownloadTarget.VPS, "magnet:?xt=urn:btih:abc", "/downloads", "job:2");
+        assertThat(requests.get(0)).contains("stopCondition=MetadataReceived");
+        assertThat(requests.get(1)).doesNotContain("stopCondition");
+    }
+
     private QbittorrentClient client() {
         QbittorrentAuthService authService = mock(QbittorrentAuthService.class);
         when(authService.getSessionCookie(DownloadTarget.VPS)).thenReturn("SID=test");

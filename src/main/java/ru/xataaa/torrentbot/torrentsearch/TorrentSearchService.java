@@ -163,10 +163,8 @@ public class TorrentSearchService {
                     .sorted(resultComparator())
                     .toList();
             List<TorrentSearchResult> preferredResults = removeZeroSeederResultsIfPossible(sortedResults);
-            int maxResults = Math.max(PAGE_SIZE, jacredProperties.maxResults() * 10);
-            List<TorrentSearchResult> results = preferredResults.stream()
-                    .limit(maxResults)
-                    .toList();
+            // Preserve candidates until the user-specific size/seeder filter has run.
+            List<TorrentSearchResult> results = List.copyOf(preferredResults);
             searchCache.put(cacheKey, new CachedSearchResults(results, Instant.now().plus(SEARCH_CACHE_TTL)));
             currentSearch.complete(results);
             return new SearchLoadResult(results, rawResults.size());

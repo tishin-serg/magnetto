@@ -47,7 +47,7 @@ public class TaskControlCallbackHandler implements TelegramCallbackHandler {
 
     private void handlePause(String callbackQueryId, Long chatId, Long messageId, String jobIdValue) {
         DownloadJob downloadJob = findJob(jobIdValue);
-        if (downloadJob == null) {
+        if (downloadJob == null || !downloadJob.getChatId().equals(chatId)) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Задача не найдена");
             return;
         }
@@ -65,8 +65,12 @@ public class TaskControlCallbackHandler implements TelegramCallbackHandler {
 
     private void handleResume(String callbackQueryId, Long chatId, Long messageId, String jobIdValue) {
         DownloadJob downloadJob = findJob(jobIdValue);
-        if (downloadJob == null) {
+        if (downloadJob == null || !downloadJob.getChatId().equals(chatId)) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Задача не найдена");
+            return;
+        }
+        if (downloadJob.getStatus() != DownloadJobStatus.PAUSED_BY_USER) {
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Задача не на пользовательской паузе");
             return;
         }
         DownloadJobStatus resumeStatus = downloadJob.getResumeStatus() == null

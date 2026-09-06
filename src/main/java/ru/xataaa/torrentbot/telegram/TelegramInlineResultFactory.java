@@ -47,9 +47,9 @@ public class TelegramInlineResultFactory {
         if (movie.isTv()) {
             text.append("\nДальше выбери сезон и серии, затем озвучку и качество.");
         } else {
-            text.append("\nДальше выбери озвучку и качество.");
+            text.append("\nПодбираю раздачу по твоим настройкам. Затем покажу подтверждение в личном чате.");
         }
-        text.append("\nПосле этого я покажу подходящие раздачи.");
+        if (movie.isTv()) text.append("\nПосле этого я покажу подходящие раздачи.");
         return text.toString();
     }
 
@@ -115,7 +115,7 @@ public class TelegramInlineResultFactory {
 
     private Map<String, Object> keyboardObject(MovieMetadata movie) {
         List<List<Map<String, String>>> rows = new ArrayList<>();
-        rows.add(List.of(Map.of("text", "Сезон, серии и раздачи", "callback_data", "movie:open:" + movie.selectionId())));
+        rows.add(List.of(Map.of("text", movie.isTv() ? "Сезон, серии и раздачи" : "Подобрать раздачу", "callback_data", "movie:open:" + movie.selectionId())));
         return Map.of("inline_keyboard", rows);
     }
 

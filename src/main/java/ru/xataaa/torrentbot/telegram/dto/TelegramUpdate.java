@@ -24,6 +24,10 @@ public class TelegramUpdate {
         private Long messageId;
         private TelegramChat chat;
         private String text;
+        @JsonProperty("reply_markup")
+        private com.fasterxml.jackson.databind.JsonNode replyMarkup;
+        @JsonProperty("via_bot")
+        private TelegramUser viaBot;
     }
 
     @Data

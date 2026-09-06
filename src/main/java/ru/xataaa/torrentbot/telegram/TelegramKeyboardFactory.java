@@ -17,6 +17,7 @@ public class TelegramKeyboardFactory {
                 {"inline_keyboard":[
                   [{"text":"Найти фильм","callback_data":"menu:search"}],
                   [{"text":"Задачи","callback_data":"menu:tasks"}],
+                  [{"text":"Настройки скачивания","callback_data":"menu:settings"}],
                   [{"text":"Домашняя медиатека","callback_data":"menu:library:home"}],
                   [{"text":"VPS медиатека","callback_data":"menu:library:vps"}],
                   [{"text":"S3 медиатека","callback_data":"menu:library:s3"}],

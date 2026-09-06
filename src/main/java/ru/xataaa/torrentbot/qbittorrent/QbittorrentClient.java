@@ -47,10 +47,15 @@ public class QbittorrentClient {
     }
 
     public void addMagnet(DownloadTarget downloadTarget, String magnetUrl, String savePath, String tag) {
+        addMagnet(downloadTarget, magnetUrl, savePath, tag, false);
+    }
+
+    public void addMagnet(DownloadTarget downloadTarget, String magnetUrl, String savePath, String tag, boolean metadataOnly) {
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
         formData.add("urls", magnetUrl);
         formData.add("savepath", savePath);
         formData.add("tags", tag);
+        if (metadataOnly) formData.add("stopCondition", "MetadataReceived");
         postForm(downloadTarget, "/api/v2/torrents/add", formData);
     }
 

@@ -26,7 +26,7 @@ public class TorrentAvailabilityService {
     private final Map<String, CompletableFuture<TorrentAvailabilityCatalog>> inFlightCatalogs = new ConcurrentHashMap<>();
 
     public TorrentAvailabilityCatalog catalog(MovieMetadata movieMetadata) {
-        String cacheKey = movieMetadata.tmdbId() == null ? movieMetadata.selectionId() : movieMetadata.tmdbId();
+        String cacheKey = movieMetadata.mediaType() + ":" + (movieMetadata.tmdbId() == null ? movieMetadata.selectionId() : movieMetadata.tmdbId());
         String cacheKeyHash = SafeLog.sha256Short(cacheKey);
         CachedCatalog cachedCatalog = cache.get(cacheKey);
         if (cachedCatalog != null && cachedCatalog.expiresAt().isAfter(Instant.now())) {

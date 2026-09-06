@@ -19,6 +19,8 @@ public class TelegramPollingService {
     private final TelegramCallbackRouter telegramCallbackRouter;
     private final TelegramInlineQueryRouter telegramInlineQueryRouter;
     private final Executor telegramWorkExecutor;
+    @org.springframework.beans.factory.annotation.Autowired
+    private MovieSelectionCallbackHandler movieSelections;
 
     public TelegramPollingService(
             TelegramBotApiClient telegramBotApiClient,
@@ -61,9 +63,23 @@ public class TelegramPollingService {
                 );
                 return;
             }
+            if (telegramUpdate.getChosenInlineResult() != null && movieSelections != null) {
+                var chosen = telegramUpdate.getChosenInlineResult();
+                if (chosen.getFrom() != null)
+                    dispatchAsync(telegramUpdate, () -> movieSelections.openFromInline(chosen.getFrom().getId(), chosen.getResultId()));
+                return;
+            }
             if (telegramUpdate.getMessage() != null
                     && telegramUpdate.getMessage().getChat() != null
                     && telegramUpdate.getMessage().getText() != null) {
+                var message = telegramUpdate.getMessage();
+                if (message.getViaBot() != null && message.getReplyMarkup() != null && movieSelections != null) {
+                    String callback = message.getReplyMarkup().path("inline_keyboard").path(0).path(0).path("callback_data").asText();
+                    if (callback.startsWith("movie:open:")) {
+                        dispatchAsync(telegramUpdate, () -> movieSelections.openFromInline(message.getChat().getId(), callback.substring("movie:open:".length())));
+                        return;
+                    }
+                }
                 dispatchAsync(telegramUpdate, () -> telegramLlmCommandRouter.route(
                         telegramUpdate.getMessage().getChat().getId(),
                         telegramUpdate.getMessage().getText()

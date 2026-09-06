@@ -42,6 +42,7 @@ public class TelegramBotApiClient {
                 .uri(uriBuilder -> uriBuilder.path("/getUpdates")
                         .queryParamIfPresent("offset", java.util.Optional.ofNullable(offset))
                         .queryParam("timeout", 20)
+                        .queryParam("allowed_updates", "[\"message\",\"callback_query\",\"inline_query\",\"chosen_inline_result\"]")
                         .build())
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<TelegramApiResponse<List<TelegramUpdate>>>() {

@@ -64,6 +64,9 @@ public class DownloadOrchestrator {
     private final AppProperties appProperties;
     private final ConcurrentMap<UUID, Boolean> runningJobs = new ConcurrentHashMap<>();
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private DownloadSizeGuard sizeGuard;
+
     public void processJob(UUID jobId) {
         if (runningJobs.putIfAbsent(jobId, Boolean.TRUE) != null) {
             return;
@@ -94,7 +97,7 @@ public class DownloadOrchestrator {
                 case DOWNLOADING -> handleDownloading(downloadJob);
                 case DOWNLOAD_COMPLETED -> changeStatus(downloadJob, DownloadJobStatus.DISCOVERING_FILES);
                 case DISCOVERING_FILES -> handleDiscoveringFiles(downloadJob);
-                case WAITING_FILE_SELECTION -> {
+                case WAITING_FILE_SELECTION, WAITING_SIZE_CONFIRMATION -> {
                 }
                 case DELIVERY_PENDING -> changeStatus(downloadJob, deliveryStatus(downloadJob));
                 case UPLOADING_TO_TELEGRAM -> handleUploading(downloadJob);
@@ -133,7 +136,9 @@ public class DownloadOrchestrator {
     private void handleAddingToQbittorrent(DownloadJob downloadJob) {
         DownloadTarget downloadTarget = downloadTarget(downloadJob);
         log.info("Adding magnet to qBittorrent: jobId={}, chatId={}, downloadTarget={}", downloadJob.getId(), downloadJob.getChatId(), downloadTarget);
-        qbittorrentTorrentService.addMagnet(downloadTarget, downloadJob.getId(), downloadJob.getMagnetUrl());
+        if (sizeGuard != null && sizeGuard.applies(downloadJob.getId()))
+            qbittorrentTorrentService.addMagnet(downloadTarget, downloadJob.getId(), downloadJob.getMagnetUrl(), true);
+        else qbittorrentTorrentService.addMagnet(downloadTarget, downloadJob.getId(), downloadJob.getMagnetUrl());
         Optional<QbittorrentTorrentInfo> torrentInfo = qbittorrentTorrentService.getTorrentInfoByJobTag(downloadTarget, downloadJob.getId());
         if (torrentInfo.isEmpty()) {
             throw new RetryableOperationException(ErrorCode.QBITTORRENT_ADD_FAILED, "Torrent was added but hash is not visible yet");
@@ -161,6 +166,7 @@ public class DownloadOrchestrator {
             }
             return;
         }
+        if (sizeGuard != null && !sizeGuard.check(downloadJob, info.getHash(), info.getTotalSize())) return;
         fileDiscoveryService.discoverFiles(downloadTarget(downloadJob), downloadJob.getId(), info.getHash());
         if (shouldAskFileSelection(downloadJob.getId())) {
             pauseTorrentForFileSelection(downloadJob, info.getHash());
@@ -172,6 +178,7 @@ public class DownloadOrchestrator {
             failIfNotEnoughDiskSpace(downloadJob, requiredBytesForReadyFiles(downloadJob.getId()));
         }
         prepareTorrentFilePriorities(downloadJob.getId(), info.getHash());
+        if (sizeGuard != null) sizeGuard.resumeValidated(downloadJob, info.getHash());
         changeStatus(downloadJob, DownloadJobStatus.DOWNLOADING);
     }
 
