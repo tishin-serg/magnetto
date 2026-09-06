@@ -8,11 +8,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import org.junit.jupiter.api.Test;
+import ru.xataaa.torrentbot.regression.UiRegression;
 import ru.xataaa.torrentbot.config.SearchProperties;
 import ru.xataaa.torrentbot.movie.MovieMediaType;
 import ru.xataaa.torrentbot.movie.MovieMetadata;
 import ru.xataaa.torrentbot.movie.MovieMetadataService;
 
+@UiRegression
 class TelegramInlineQueryRouterTest {
 
     private final MovieMetadataService movieMetadataService = org.mockito.Mockito.mock(MovieMetadataService.class);

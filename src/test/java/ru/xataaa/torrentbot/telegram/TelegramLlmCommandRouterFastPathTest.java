@@ -9,6 +9,7 @@ import ru.xataaa.torrentbot.config.AppProperties;
 import ru.xataaa.torrentbot.config.LlmProperties;
 import ru.xataaa.torrentbot.llm.LlmRouter;
 import ru.xataaa.torrentbot.llm.UserDialogStateRepository;
+import ru.xataaa.torrentbot.regression.UiRegression;
 import ru.xataaa.torrentbot.telegram.handler.HelpCommandHandler;
 import ru.xataaa.torrentbot.telegram.handler.LibraryCommandHandler;
 import ru.xataaa.torrentbot.telegram.handler.SettingsCommandHandler;
@@ -16,6 +17,7 @@ import ru.xataaa.torrentbot.telegram.handler.TasksCommandHandler;
 import ru.xataaa.torrentbot.telegram.handler.TorrentSearchMessageHandler;
 import ru.xataaa.torrentbot.telegram.handler.UnknownMessageHandler;
 
+@UiRegression
 class TelegramLlmCommandRouterFastPathTest {
 
     @Test

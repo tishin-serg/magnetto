@@ -10,7 +10,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import ru.xataaa.torrentbot.regression.ApiRegression;
 
+@ApiRegression
 class DownloadControllerTest {
 
     private final DownloadLinkService downloadLinkService = mock(DownloadLinkService.class);

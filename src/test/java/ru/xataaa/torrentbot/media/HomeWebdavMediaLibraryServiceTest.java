@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import ru.xataaa.torrentbot.regression.ApiRegression;
 import org.springframework.web.reactive.function.client.WebClient;
 import ru.xataaa.torrentbot.config.HomeWebdavProperties;
 
+@ApiRegression
 class HomeWebdavMediaLibraryServiceTest {
 
     @Test
