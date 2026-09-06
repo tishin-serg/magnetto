@@ -1,53 +1,478 @@
-# Telegram Torrent Bot MVP
+# Magnetto
 
-Бот принимает magnet-ссылку или название фильма, ищет раздачи через JacRed, добавляет выбранный torrent в qBittorrent, отслеживает прогресс и доставляет результат пользователю.
+Magnetto — Telegram-бот для поиска фильмов и сериалов, выбора torrent-раздачи,
+загрузки через qBittorrent и доставки файлов на VPS, домашний компьютер или в
+S3-совместимое хранилище.
 
-## Работа с проектом
+Проект написан на Java 21 и Spring Boot 3. Состояние задач хранится в PostgreSQL,
+поэтому незавершённые загрузки можно восстановить после перезапуска приложения.
 
-Правила веток, коммитов, проверки и выкладки: [AGENTS.md](AGENTS.md).
-Правила номеров версий, тегов и выпуска: [VERSIONING.md](VERSIONING.md).
+## Содержание
 
-Новая самостоятельная задача получает ветку `MGB-NN`. Основная ветка — `master`.
-Номер задачи и номер версии приложения ведутся независимо.
+- [Возможности](#возможности)
+- [Команды и главное меню](#команды-и-главное-меню)
+- [Поиск и выбор раздачи](#поиск-и-выбор-раздачи)
+- [Цели скачивания](#цели-скачивания)
+- [Задачи и восстановление](#задачи-и-восстановление)
+- [Медиатеки и очистка](#медиатеки-и-очистка)
+- [Архитектура](#архитектура)
+- [Конфигурация](#конфигурация)
+- [Запуск](#запуск)
+- [Тесты и CI/CD](#тесты-и-cicd)
+- [Эксплуатация и диагностика](#эксплуатация-и-диагностика)
 
-## История релизов и этапов
+## Возможности
 
-История ниже восстановлена по локальным и удалённым веткам и коммитам.
-На 6 сентября 2026 года тегов и GitHub Releases нет; версия приложения
-в `pom.xml` — `0.0.1-SNAPSHOT`. Поэтому старым этапам не присвоены
-задним числом номера версий. Даты в таблице — даты коммитов, не подтверждённые
-даты выкладки на сервер. Все перечисленные завершённые этапы входят в `master`.
+- Поиск фильмов и сериалов через TMDb с постерами и inline-подсказками Telegram.
+- Прямой поиск torrent-раздач через JacRed по названию, году и типу контента.
+- Приём готовой magnet-ссылки без поискового этапа.
+- Фильтрация раздач по размеру, числу сидов, качеству и озвучке.
+- Настройки скачивания, сохраняемые отдельно для каждого Telegram-чата.
+- Выбор сезонов и серий для сериалов.
+- Предварительная карточка раздачи с подтверждением перед созданием задачи.
+- Повторная проверка фактического размера после получения torrent metadata.
+- Выбор отдельных видеофайлов, если torrent содержит несколько файлов.
+- Скачивание на VPS, домашний ПК через Tailscale или в S3 через VPS staging.
+- Отправка небольших файлов прямо в Telegram.
+- WebDAV-медиатеки для VPS и домашнего ПК, временные ссылки для iPhone.
+- Отдельная S3-медиатека с presigned-ссылками и удалением объектов.
+- Очередь задач, прогресс, пауза, продолжение, retry и восстановление после рестарта.
+- Ограничение доступа по Telegram chat ID.
+- Опциональное распознавание естественных команд локальной LLM через Ollama.
+- Метрики и health endpoint через Spring Boot Actuator.
+- Регрессионные UI/API-наборы, обязательные перед слиянием в `master`.
 
-| Этап | Даты коммитов | Что вошло | Контрольный коммит |
-| --- | --- | --- | --- |
-| База проекта | 30–31.08.2026 | Исходный Telegram-бот с маршрутизацией текстовых запросов через LLM и поддержкой S3; восстановление запуска домашнего WebDAV. | `3b1d4d1`, `a3e4b9d` |
-| MGB-01 — обновления прогресса | 01.09.2026 | Ограничена частота обновления сообщений о ходе загрузки. | `b333409` |
-| MGB-02 — сборка, выкладка и S3 | 01–02.09.2026 | Maven Wrapper и проверка сборки; GitHub Actions CI/CD; выкладка готового JAR, проверки готовности и перезапуск приложения; восстановление доставки в S3. | `7724e51` |
-| MGB-03 — скорость ответов | 02.09.2026 | Асинхронная обработка сообщений, быстрые маршруты команд, кэширование поиска и снижение задержек ответа; упаковка JAR для CI и ручная выкладка выбранной ветки. | `d55c998` |
-| MGB-04 — задержки поиска | 03.09.2026 | Прямой поиск раздач через /search, ограничения времени резервных запросов JacRed и TMDb, пропуск малоинформативного fallback и параллельный поиск. Слияние: `22f20e8`. | `2b6d55d` |
-| MGB-05 — подсказки TMDb | 03–04.09.2026 | Использование кэша при inline-поиске, сокращение фоновых запросов, замена HTTP-клиента TMDb. Слияние: `9788534`. | `15f5434` |
-| Доработки после MGB-05 | 04–05.09.2026 | Диагностика ошибок TMDb, IPv4, переход к curl, настройка памяти процесса, выдача подсказок при первом запросе и исправление повторной обработки inline-выбора. | `2bc9d34`, `05793ee` |
+## Команды и главное меню
 
-### MGB-06 — подбор фильма с подтверждением
+| Команда | Назначение |
+| --- | --- |
+| `/start` | Открыть главное меню. |
+| `/help` | Показать главное меню и доступные действия. |
+| `/search название` | Сразу искать раздачи в JacRed. |
+| `/library` | Показать доступные VPS и Home-медиатеки. |
+| `/tasks` | Показать активные и последние задачи. |
+| `/settings` | Открыть сохранённые условия подбора. |
 
-Статус: **слито в master и развёрнуто 06.09.2026, без тега**.
-Коммит реализации: `4ac1e77`. Ветка первоначально называлась
-`feature/movie-download-preferences`, затем приведена к принятому формату `MGB-06`.
+Для списка задач также поддерживаются `/task`, `/status`, `/processes` и
+`/задачи`. Обычный текст считается запросом фильма. Фраза `поиск название`
+тоже запускает поиск.
 
-- Настройки размера «от — до», минимума сидов и места скачивания в Telegram.
-- Автоматический подбор после выбора фильма в TMDb с обязательным подтверждением.
-- Разовые условия заявки, переключение вариантов, ручной выбор и отмена.
-- Повторная проверка размера по metadata и отдельное подтверждение при расхождении.
-- Защита от повторного запуска и исключение явно обозначенных сборников из подбора.
+Главное меню содержит:
 
-Проверка: 110 автоматических тестов и сценарии в Telegram.
-Подробности: [отчёт проверки](docs/confirmation-test-report.md).
+- `Найти фильм`;
+- `Задачи`;
+- `Настройки скачивания`;
+- `Домашняя медиатека`;
+- `VPS медиатека`;
+- `S3 медиатека`;
+- `Свободное место`;
+- `Очистить медиатеку`;
+- `Инструкция iPhone`.
 
-## Регрессионные проверки
+## Поиск и выбор раздачи
 
-Полный список пользовательских функций и их покрытие: [регрессионный чек-лист](docs/regression-checklist.md).
+### Поиск через TMDb
 
-Локальный запуск отдельных наборов:
+Кнопка `Найти фильм` открывает inline-поиск текущего чата. Telegram отправляет
+введённое название боту, а бот запрашивает TMDb и показывает карточки с названием,
+оригинальным названием, годом, типом, рейтингом и постером.
+
+После выбора карточки бот точно знает TMDb ID и тип контента. Для сериала он может
+загрузить список сезонов и серий. Повторные inline query используют кэш, а
+одновременные одинаковые запросы объединяются. Callback из карточки и
+`chosen_inline_result` дедуплицируются, чтобы один выбор не создавал две заявки.
+
+Для inline-режима его нужно включить в BotFather:
+
+```text
+/setinline
+@имя_бота
+```
+
+### Поиск через JacRed
+
+Команда `/search` всегда запускает прямой поиск раздач. Обычный текст сначала
+проверяет готовый TMDb-кэш; если подходящих карточек там нет, выполняется JacRed
+поиск.
+
+Алгоритм JacRed:
+
+1. Структурированный запрос по названию, оригинальному названию, году и типу.
+2. Короткий fallback по общей строке запроса, если результатов недостаточно.
+3. Объединение и удаление дублей.
+4. Фильтрация по пользовательским условиям.
+5. Сортировка с приоритетом magnet-ссылки, сидов и нормального качества.
+
+CAMRip, TS, TeleSync и другие экранные копии скрываются, когда есть нормальные
+варианты. В выдаче показываются название, размер, качество, озвучка, сиды, пиры,
+трекер, дата и ссылка на страницу раздачи. Результаты разбиты на страницы.
+
+### Условия подбора
+
+В `/settings` настраиваются:
+
+- минимальный и максимальный размер раздачи в десятичных ГБ;
+- минимальное число сидов;
+- цель по умолчанию: домашний ПК, VPS или S3.
+
+Начальные значения: 4–15 ГБ, минимум 10 сидов, домашний ПК. Сохранённые настройки
+живут в PostgreSQL. В карточке конкретного фильма можно задать разовые условия,
+не меняя постоянные настройки.
+
+Автоподбор исключает раздачи с неизвестным размером, размером вне диапазона,
+недостатком сидов и экранным качеством. Сначала выбирается вариант с большим
+числом сидов, затем меньший по размеру. Если совпадений нет, можно изменить
+условия или перейти к ручному выбору.
+
+### Подтверждение и metadata
+
+До нажатия `Скачать` задача не создаётся. Карточка подтверждения позволяет:
+
+- начать скачивание;
+- выбрать другой найденный вариант;
+- изменить разовые условия;
+- перейти к ручной выдаче;
+- отменить действие.
+
+Для новых заявок torrent добавляется в qBittorrent с остановкой после получения
+metadata. Бот сравнивает фактический размер с подтверждённым диапазоном. При
+расхождении torrent остаётся на паузе до отдельного подтверждения пользователя.
+
+Если внутри несколько видеофайлов, всем файлам временно ставится приоритет `0`.
+Пользователь выбирает нужные фильмы, сезоны или серии, после чего выбранным
+файлам ставится приоритет `1` и загрузка продолжается.
+
+Сессия поиска и callback-кнопки ограничены по времени. Устаревшие, повторные и
+принадлежащие другому пользователю действия отклоняются без создания второй задачи.
+
+### Готовая magnet-ссылка
+
+Валидная `magnet:?xt=urn:btih:...` ссылка пропускает поиск и сразу открывает выбор
+цели. При нескольких видеофайлах этап metadata и ручного выбора сохраняется.
+
+## Цели скачивания
+
+### VPS
+
+qBittorrent скачивает torrent в общий Docker volume `/downloads`. После окончания
+бот обнаруживает выбранные видеофайлы:
+
+- файл до `TELEGRAM_DIRECT_SEND_LIMIT_BYTES` отправляется в Telegram;
+- большой файл помещается в VPS WebDAV-медиатеку;
+- для загрузки через браузер может быть создана временная ссылка `/download/{token}`,
+  которую nginx обслуживает через `X-Accel-Redirect`.
+
+Для переноса в медиатеку используется `HARDLINK`, если файловая система это
+поддерживает, и настроенная fallback-стратегия, обычно `COPY`.
+
+### Домашний ПК
+
+Бот с VPS обращается к qBittorrent Web API на домашнем компьютере через Tailscale.
+Файл сразу скачивается в домашний `QBITTORRENT_HOME_DOWNLOAD_PATH`; промежуточная
+копия на VPS не создаётся.
+
+Домашний WebDAV используется для:
+
+- просмотра фильмов и папок сериалов;
+- пагинации и отображения размера/времени изменения;
+- ссылок через Tailscale и домашний Wi-Fi;
+- временной прокси-ссылки `/home-download/{token}` с поддержкой HTTP Range;
+- удаления отдельного файла с подтверждением;
+- полной ручной очистки домашней медиатеки.
+
+Если домашний ПК выключен или API временно недоступен, задача переходит в retry,
+а не удаляется.
+
+### S3
+
+S3 не монтируется как файловая система. qBittorrent сначала скачивает torrent в
+VPS staging path, после чего выбранные файлы загружаются через S3 API под
+`MEDIA_S3_PREFIX`.
+
+После успешной загрузки:
+
+- файл получает состояние `S3_UPLOADED` и object key сохраняется в PostgreSQL;
+- бот отправляет presigned GET-ссылку с ограниченным сроком жизни;
+- при `MEDIA_S3_DELETE_LOCAL_AFTER_UPLOAD=true` torrent и локальные данные на VPS
+  удаляются только после подтверждённого успеха S3.
+
+При временной ошибке S3 локальные файлы сохраняются для retry. При финальной
+ошибке задача получает `FAILED_FINAL` и `S3_UPLOAD_FAILED`.
+
+Новые задачи записываются с целью `S3`. Значение `S3_LATER` читается только для
+совместимости со старыми строками базы данных и пользователю также показывается
+как `S3`.
+
+## Задачи и восстановление
+
+Если уже выполняется активная загрузка или доставка, новая задача попадает в
+очередь. Экран задач показывает состояние и предоставляет кнопки обновления,
+паузы и продолжения.
+
+Основные этапы жизненного цикла:
+
+```text
+QUEUED
+  -> ADDING_TO_QBITTORRENT
+  -> WAITING_METADATA
+  -> DOWNLOADING
+  -> DISCOVERING_FILES
+  -> UPLOADING_TO_TELEGRAM | UPLOADING_TO_S3 | DELIVERY_COMPLETED
+  -> CLEANING_UP
+  -> FINISHED
+```
+
+Дополнительные состояния обслуживают подтверждение размера, выбор файлов,
+пользовательскую паузу, ожидание retry и финальные ошибки.
+
+Прогресс обновляется редактированием существующего Telegram-сообщения. Показываются
+процент, скорость, оставшийся объём, примерное время и свободное место. qBittorrent
+API сначала использует `/pause` и `/resume`; при `404` автоматически пробует
+совместимые с новыми версиями `/stop` и `/start`.
+
+Фоновый recovery scheduler находит незавершённые и зависшие задачи после рестарта.
+Временные ошибки получают ограниченное число повторов с задержками. Превышение
+таймаутов metadata, загрузки, доставки или cleanup переводит задачу в ошибку.
+
+## Медиатеки и очистка
+
+### VPS-медиатека
+
+Показывает файлы из `MEDIA_LIBRARY_PATH`, суммарный размер и ссылку на read-only
+WebDAV для Infuse. В текущей compose-схеме это `/downloads/media-library`, поэтому
+hardlink не занимает вторую копию данных.
+
+### Домашняя медиатека
+
+Показывает отдельные фильмы и папки сериалов, число файлов, размер и время
+изменения. Внутри папки можно выбрать конкретную серию, получить временную ссылку
+или удалить файл после подтверждения.
+
+### S3-медиатека
+
+Показывает только объекты внутри `MEDIA_S3_PREFIX`: количество, общий размер,
+страницу и файлы от новых к старым. Для файла доступны свежая presigned-ссылка и
+удаление с подтверждением. Bucket может оставаться приватным.
+
+### Ручная очистка
+
+Кнопка `Очистить медиатеку` требует выбрать VPS, Home или S3 и подтвердить
+действие. Ветки выполняются независимо: ошибка Home или S3 возвращает короткое
+сообщение и не ломает остальные функции.
+
+S3 cleanup удаляет только объекты, полученные по настроенному prefix, а не весь
+bucket. VPS cleanup ограничен каталогом медиатеки. Home cleanup работает только
+через настроенный WebDAV.
+
+Плановой ежедневной очистки S3 сейчас нет. `MEDIA_S3_DELETE_LOCAL_AFTER_UPLOAD`
+удаляет лишь VPS staging после успешной выгрузки. Параметры
+`MEDIA_LIBRARY_AUTO_DELETE_ENABLED` и `MEDIA_LIBRARY_RETENTION_DAYS` объявлены в
+конфигурации, но отдельный scheduler автоматической очистки медиатеки пока не
+реализован. Scheduler `DOWNLOAD_LINK_CLEANUP_INTERVAL_MS` очищает просроченные
+временные ссылки, а не S3 bucket.
+
+## iPhone и Infuse
+
+Для небольшого файла достаточно Telegram. Для больших файлов доступны:
+
+1. Временная браузерная ссылка из VPS или Home-медиатеки.
+2. WebDAV в Infuse через Tailscale вне дома.
+3. Локальный WebDAV URL через Wi-Fi дома.
+4. Presigned S3 URL, если файл доставлен в S3.
+
+WebDAV в Infuse добавляется через `Add Files / Shares -> WebDAV`. Перед поездкой
+следует отдельно проверить, что файл скачан на устройство офлайн.
+
+## LLM-команды
+
+При `LLM_ROUTER_ENABLED=true` бот может через Ollama распознавать естественные
+фразы: поиск, список задач, паузу/продолжение, медиатеку, свободное место, cleanup,
+инструкцию iPhone, помощь и настройки. Разрушающие и неоднозначные действия всё
+равно требуют выбора или подтверждения кнопкой.
+
+Стандартные команды, callbacks и magnet-ссылки обрабатываются быстрыми маршрутами
+без ожидания LLM. При выключенном LLM основные функции бота продолжают работать.
+
+## Архитектура
+
+| Компонент | Ответственность |
+| --- | --- |
+| `bot-app` | Telegram polling, TMDb/JacRed, orchestration, delivery, retry и HTTP endpoints. |
+| PostgreSQL 16 | Задачи, файлы, настройки, временные ссылки и Telegram polling offset. |
+| qBittorrent | Torrent metadata, выбор файлов, загрузка, пауза и cleanup. |
+| JacRed | Индекс раздач через Jackett-совместимый API. Запускается отдельно от compose. |
+| TMDb | Метаданные фильмов/сериалов, постеры, сезоны и серии. |
+| nginx | Эффективная отдача VPS-файлов по временным токенам. |
+| rclone WebDAV | Read-only доступ к VPS-медиатеке для Infuse. |
+| S3-compatible storage | Приватная объектная медиатека и presigned GET URLs. |
+| telegram-bot-api | Опциональный self-hosted Telegram Bot API в profile `local-api`. |
+| Ollama | Опциональный локальный LLM router. |
+
+Упрощённый поток:
+
+```text
+Telegram -> TMDb/JacRed -> confirmation -> PostgreSQL job
+                                     -> qBittorrent VPS -> Telegram/WebDAV/S3
+                                     -> qBittorrent Home -> Home WebDAV
+```
+
+## Конфигурация
+
+Создайте `.env` на основе `.env.example`. Файл `.env` содержит секреты и не
+должен попадать в Git.
+
+### Обязательная база
+
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=
+TELEGRAM_BASE_URL=https://api.telegram.org
+
+SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/torrentbot
+SPRING_DATASOURCE_USERNAME=torrentbot
+SPRING_DATASOURCE_PASSWORD=
+
+QBITTORRENT_USERNAME=admin
+QBITTORRENT_PASSWORD=
+
+JACRED_BASE_URL=http://host-or-tailscale-address:9117
+JACRED_API_KEY=
+TMDB_API_KEY=
+
+ALLOWED_CHAT_IDS=123456789
+```
+
+Пустой `ALLOWED_CHAT_IDS` разрешает доступ всем чатам. Для приватного бота лучше
+явно перечислить допустимые ID через запятую.
+
+### Домашний ПК
+
+```env
+QBITTORRENT_HOME_BASE_URL=http://100.x.y.z:8080
+QBITTORRENT_HOME_USERNAME=admin
+QBITTORRENT_HOME_PASSWORD=
+QBITTORRENT_HOME_DOWNLOAD_PATH=/media/movies
+
+HOME_WEBDAV_ENABLED=true
+HOME_WEBDAV_BASE_URL=http://100.x.y.z:8085/
+HOME_WEBDAV_LOCAL_BASE_URL=http://192.168.x.y:8085/
+HOME_WEBDAV_USERNAME=
+HOME_WEBDAV_PASSWORD=
+```
+
+qBittorrent и WebDAV должны слушать не только `127.0.0.1`. Windows Firewall
+должен разрешать выбранные порты в доверенной сети, а VPS должен видеть Tailscale
+адрес домашнего ПК.
+
+### S3
+
+```env
+MEDIA_S3_ENABLED=true
+MEDIA_S3_ENDPOINT_URL=https://s3-compatible-endpoint.example
+MEDIA_S3_REGION=us-east-1
+MEDIA_S3_ACCESS_KEY=
+MEDIA_S3_SECRET_KEY=
+MEDIA_S3_BUCKET=
+MEDIA_S3_PREFIX=media-library/
+MEDIA_S3_PRESIGNED_LINK_TTL_HOURS=24
+MEDIA_S3_PATH_STYLE_ACCESS_ENABLED=true
+MEDIA_S3_DELETE_LOCAL_AFTER_UPLOAD=true
+```
+
+S3 считается настроенным только при включённом feature flag и заполненных
+access key, secret key и bucket. Для VK Cloud и других S3-compatible провайдеров
+также задаётся их endpoint; AWS SDK может выбрать стандартный AWS endpoint по
+region. При неполной настройке бот не создаёт S3-задачу.
+
+### Основные группы параметров
+
+| Префикс | Что настраивает |
+| --- | --- |
+| `TELEGRAM_*` | Bot API URL, worker pool, таймауты и прямую отправку файлов. |
+| `TMDB_*` | API, язык, изображения, cache TTL, таймауты и число подсказок. |
+| `JACRED_*` | URL, API key, лимит результатов и таймаут fallback. |
+| `SEARCH_*` | Inline cache/debounce, сессии, качество и озвучку по умолчанию. |
+| `QBITTORRENT_VPS_*` | VPS qBittorrent и путь staging/downloads. |
+| `QBITTORRENT_HOME_*` | Домашний qBittorrent через Tailscale. |
+| `MEDIA_LIBRARY_*` | VPS WebDAV-медиатеку и стратегию переноса. |
+| `HOME_WEBDAV_*` | Домашнюю медиатеку и HTTP timeout. |
+| `MEDIA_S3_*` | S3 endpoint, bucket, prefix, ссылки и локальный cleanup. |
+| `RETRY_*` | Число попыток и задержки повторов. |
+| `LLM_*`, `OLLAMA_*` | Опциональный LLM router. |
+| `PROGRESS_*`, `RECOVERY_*` | Частоту обновления прогресса и восстановления. |
+
+Все значения и defaults находятся в
+[`application.yml`](src/main/resources/application.yml) и `docker-compose.yml`.
+
+## Запуск
+
+Требования:
+
+- Docker Engine с Compose v2;
+- доступ к Telegram, TMDb и настроенному JacRed;
+- Java 21 только для локальной сборки без Docker;
+- Tailscale для сценария домашнего ПК.
+
+Стандартный запуск с официальным Telegram Bot API:
+
+```bash
+docker compose up --build -d
+```
+
+Запуск с self-hosted Telegram Bot API:
+
+```env
+TELEGRAM_BASE_URL=http://telegram-bot-api:8081
+TELEGRAM_API_ID=
+TELEGRAM_API_HASH=
+```
+
+```bash
+docker compose --profile local-api up --build -d
+```
+
+Проверка контейнеров и логов:
+
+```bash
+docker compose ps
+docker compose logs -f bot-app
+docker compose logs -f qbittorrent
+docker compose logs -f postgres
+```
+
+Остановка без удаления данных:
+
+```bash
+docker compose down
+```
+
+Не используйте `docker compose down -v`, если нужно сохранить PostgreSQL,
+qBittorrent config, Telegram Bot API data и скачанные файлы.
+
+## Локальная разработка
+
+Windows:
+
+```powershell
+.\mvnw.cmd test
+.\mvnw.cmd verify
+.\mvnw.cmd spring-boot:run
+```
+
+Linux/macOS:
+
+```bash
+./mvnw test
+./mvnw verify
+./mvnw spring-boot:run
+```
+
+Для запуска приложения вне Docker PostgreSQL, qBittorrent и остальные URLs в
+`.env` должны быть доступны с host-машины, а не только по именам compose-сервисов.
+
+## Тесты и CI/CD
+
+Специализированные наборы:
 
 ```powershell
 .\mvnw.cmd -Dgroups=ui-regression test
@@ -55,242 +480,26 @@
 .\mvnw.cmd verify
 ```
 
-Для pull request в `master` GitHub Actions отдельно запускает `UI Regression` и
-`API Regression`. Полная проверка и сборка начинаются только после успеха обоих
-наборов; выкладка по-прежнему выполняется только из `master` или вручную через
-`workflow_dispatch` для выбранной ветки.
+`UI Regression` проверяет Telegram-тексты, кнопки, callback data, пагинацию,
+подтверждения и дедупликацию без браузера и production Telegram. `API Regression`
+использует локальные fake HTTP-серверы для Telegram Bot API, TMDb, JacRed,
+qBittorrent, Home WebDAV, download endpoints и S3.
 
-Первый будущий релиз с номером планируется как `0.1.0`; он ещё не выпущен.
+Полная матрица функций и ручной smoke-набор находятся в
+[`docs/regression-checklist.md`](docs/regression-checklist.md).
 
-Бот принимает magnet-ссылку или название фильма, ищет раздачи через JacRed, добавляет выбранный torrent в qBittorrent, отслеживает прогресс и доставляет результат пользователю.
+GitHub Actions:
 
-## Что умеет
+1. Pull request в `master` запускает `UI Regression` и `API Regression` параллельно.
+2. После них запускается полный `Test` и сборка JAR.
+3. Все три checks обязательны защитой ветки `master`.
+4. Push merge-коммита в `master` повторяет проверки и развёртывает production.
+5. `workflow_dispatch` позволяет вручную собрать и развернуть выбранную ветку.
 
-- `/start` и `/help` показывают меню с кнопками.
-- `/library` показывает файлы, доступные в WebDAV-медиатеке.
-- Magnet-ссылка запускает загрузку напрямую.
-- Обычный текст или `/search название` запускает поиск через JacRed.
-- Результаты поиска показываются страницами с сидами, пирами, размером, качеством, трекером, датой и ссылкой на страницу раздачи.
-- Если в torrent несколько видеофайлов, бот спрашивает, что именно скачивать, до основной загрузки.
-- Статус загрузки обновляется редактированием старого сообщения примерно каждые 5 секунд.
-- В статусе видны процент, скорость, остаток, примерное время и свободное место.
-- Файлы до `TELEGRAM_DIRECT_SEND_LIMIT_BYTES` отправляются в Telegram через `sendDocument`.
-- Большие файлы попадают в WebDAV-медиатеку для Infuse на iPhone и получают временную fallback-ссылку.
-- Есть кнопка принудительной очистки медиатеки.
-- Новые задачи ставятся в очередь, если уже идёт активная загрузка/доставка.
+Правила веток, коммитов и выкладки: [`AGENTS.md`](AGENTS.md). Правила версий и
+тегов: [`VERSIONING.md`](VERSIONING.md).
 
-## Архитектура
-
-- **bot-app**: Java 21 + Spring Boot 3, Telegram polling, orchestration, retry, PostgreSQL state.
-- **qBittorrent**: скачивает torrents в общий volume `/downloads`.
-- **JacRed**: torrent indexer, совместимый с Jackett API.
-- **PostgreSQL**: хранит jobs, files, download links и Telegram polling offset.
-- **telegram-bot-api**: self-hosted Bot API server в local mode.
-- **nginx**: отдаёт fallback-ссылки через `X-Accel-Redirect`.
-- **WebDAV**: rclone WebDAV отдаёт `/downloads/media-library` для Infuse.
-
-## JacRed
-
-Поиск идёт через:
-
-```text
-GET /api/v2.0/indexers/all/results
-```
-
-Настройки:
-
-```env
-JACRED_BASE_URL=http://172.17.0.1:9117
-JACRED_API_KEY=...
-JACRED_MAX_RESULTS=5
-```
-
-Если бот запущен не в Docker или использует host network:
-
-```env
-JACRED_BASE_URL=http://127.0.0.1:9117
-```
-
-Логика поиска:
-
-- сначала запрос по распознанному названию/году/типу;
-- если результатов мало, fallback через общий `query`;
-- выше ставятся раздачи с `MagnetUri`, большим числом сидов и нормальным качеством;
-- CAMRip/TS/TeleSync/экранки скрываются, если есть нормальные варианты;
-- постеры JacRed/Jackett API обычно не отдаёт, для них нужна отдельная интеграция с TMDb/Kinopoisk.
-
-## Выбор Файлов
-
-После появления metadata бот получает список файлов torrent через qBittorrent API. Если видеофайлов несколько:
-
-- бот ставит torrent на паузу;
-- выставляет приоритет `0` всем файлам;
-- показывает кнопки выбора;
-- после выбора выставляет приоритет `1` выбранным файлам и продолжает загрузку.
-
-Так можно скачать одну серию или одну часть, а не весь torrent целиком.
-
-## iPhone И Большие Фильмы
-
-Telegram Bot API безопасно используется только до:
-
-```env
-TELEGRAM_DIRECT_SEND_LIMIT_BYTES=2040109465
-```
-
-Для больших фильмов бот использует WebDAV. В текущей compose-схеме медиатека лежит внутри downloads volume:
-
-```env
-MEDIA_LIBRARY_PATH=/downloads/media-library
-```
-
-Это позволяет использовать hardlink и не удваивать место на диске для новых файлов.
-
-В Infuse:
-
-1. Установить Infuse.
-2. Открыть `Add Files / Shares`.
-3. Выбрать WebDAV.
-4. Указать URL из `MEDIA_LIBRARY_PUBLIC_WEBDAV_URL`.
-5. Ввести `WEBDAV_USERNAME` и `WEBDAV_PASSWORD`.
-6. После загрузки фильма ботом открыть папку и нажать Download.
-7. Перед поездкой проверить, что фильм скачан офлайн.
-
-## Зачем Нужна Медиатека
-
-qBittorrent downloads нужны для скачивания, сидирования и cleanup. WebDAV-медиатека нужна как стабильная папка для Infuse. Раньше она была отдельным Docker volume, поэтому большие фильмы могли копироваться и занимать место дважды. Теперь новые фильмы кладутся в `/downloads/media-library`, где hardlink работает в том же volume.
-
-## Очистка
-
-В меню есть кнопка `Очистить медиатеку`. Она:
-
-- требует подтверждения;
-- удаляет только файлы внутри `MEDIA_LIBRARY_PATH`;
-- не трогает активные torrents напрямую;
-- освобождает место для новых загрузок.
-
-## Запуск
-
-Создать `.env` из `.env.example` и заполнить секреты:
-
-```env
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_BOT_USERNAME=
-TELEGRAM_API_ID=
-TELEGRAM_API_HASH=
-QBITTORRENT_USERNAME=admin
-QBITTORRENT_PASSWORD=adminadmin
-SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/torrentbot
-SPRING_DATASOURCE_USERNAME=torrentbot
-SPRING_DATASOURCE_PASSWORD=torrentbot
-JACRED_API_KEY=
-PROGRESS_POLL_INTERVAL_MS=5000
-```
-
-Запуск:
-
-```bash
-docker compose --profile local-api up --build -d
-```
-
-Логи:
-
-```bash
-docker compose logs -f bot-app
-docker compose logs -f qbittorrent
-docker compose logs -f telegram-bot-api
-docker compose logs -f nginx
-docker compose logs -f webdav
-```
-
-## Ограничения MVP
-
-- `.torrent` uploads не являются главным сценарием.
-- FFmpeg, userbot/MTProto, Redis, quotas и web UI не используются.
-- Постеры в поиске не показываются, потому что JacRed/Jackett API обычно не отдаёт poster URL.
-- Временный результат поиска хранится в памяти около 30 минут; после рестарта нужно повторить поиск.
-## Скачивание сразу на домашний ПК
-
-Бот умеет выбирать, куда отправлять torrent:
-
-- `VPS` — старое поведение: qBittorrent в Docker скачивает в `/downloads`.
-- `Домашний ПК` — бот с VPS управляет qBittorrent на домашнем компьютере через Tailscale, а файл сразу пишется на домашний диск.
-
-Для домашнего сценария на ПК нужно поднять qBittorrent Web UI/API и WebDAV-папку для Infuse, например через `rclone serve webdav`. Tailscale должен быть установлен на домашнем ПК, VPS и iPhone.
-
-Пример переменных:
-
-```env
-QBITTORRENT_HOME_BASE_URL=http://100.x.y.z:8080
-QBITTORRENT_HOME_USERNAME=admin
-QBITTORRENT_HOME_PASSWORD=strong-password
-QBITTORRENT_HOME_DOWNLOAD_PATH=/media/movies
-
-HOME_WEBDAV_ENABLED=true
-HOME_WEBDAV_BASE_URL=http://100.x.y.z:8085/
-HOME_WEBDAV_USERNAME=infuse
-HOME_WEBDAV_PASSWORD=strong-password
-```
-
-Если домашний ПК выключен или qBittorrent недоступен, задача не отменяется: бот поставит ее в retry и продолжит попытки автоматически.
-
-S3 для torrent напрямую не используется: qBittorrent плохо работает с object storage как с обычным диском. Практичный вариант для S3 — скачать на VPS или домашний ПК, затем загрузить готовый файл в S3 и удалить локальную копию.
-
-## Home WebDAV Links
-
-For downloads targeted to the home PC, the bot can show both WebDAV addresses:
-
-```env
-HOME_WEBDAV_ENABLED=true
-HOME_WEBDAV_BASE_URL=http://100.x.y.z:8085/
-HOME_WEBDAV_LOCAL_BASE_URL=http://192.168.1.189:8085/
-HOME_WEBDAV_USERNAME=infuse
-HOME_WEBDAV_PASSWORD=strong-password
-```
-
-- `HOME_WEBDAV_BASE_URL` is the Tailscale address, useful for iPhone outside the home network.
-- `HOME_WEBDAV_LOCAL_BASE_URL` is the home Wi-Fi/LAN address, useful for a TV at home.
-- The home PC should run WebDAV on `0.0.0.0:8085`, not only on `127.0.0.1`.
-- Windows Firewall should allow inbound TCP `8085` on the private home network.
-- It is best to reserve the home PC LAN IP in the router, otherwise the TV URL can change after reboot.
-
-After a home PC download finishes, the bot edits the status message and adds buttons for the Tailscale file link, the Wi-Fi file link, and the WebDAV folder. The `Медиатека` button shows both VPS media files and home WebDAV files when home WebDAV is enabled.
-
-## Movie Search UX
-
-The bot can search movies and series in two steps:
-
-1. TMDb is used for a friendly movie card: title, original title, year, rating and poster.
-2. JacRed is used for torrent releases after the user chooses a movie card.
-
-Required variables:
-
-```env
-TMDB_API_KEY=
-TMDB_LANGUAGE=ru-RU
-TMDB_CACHE_TTL_MINUTES=360
-TMDB_MAX_INLINE_RESULTS=10
-```
-
-For Findvid-like search inside Telegram input, enable inline mode for the bot in BotFather:
-
-```text
-/setinline
-@magnet_bott
-```
-
-After that, typing `@magnet_bott матрица 1999` in Telegram should show movie cards with posters. Selecting a card posts it to the chat; pressing "Найти раздачи" opens JacRed torrent results.
-
-Chat search still works too: send `/search матрица 1999` or just type a movie name.
-
-## Observability
-
-The bot logs search stages and records Micrometer metrics for future optimization:
-
-- TMDb search latency and cache hit/miss.
-- JacRed search latency and failures.
-- Inline query handling latency.
-- Telegram inline answer latency.
+## Эксплуатация и диагностика
 
 Actuator endpoints:
 
@@ -299,38 +508,53 @@ Actuator endpoints:
 /actuator/metrics
 ```
 
-Do not log bot tokens, TMDb/JacRed keys or full private URLs. Search logs use short previews and hashes where useful.
+При старте бот проверяет PostgreSQL/Liquibase и доступность qBittorrent, Telegram,
+JacRed и download path. Метрики включают задержки TMDb, JacRed, inline query и
+Telegram API. Логи используют preview/hash поискового запроса и не должны
+содержать bot token, API keys, пароли или полные приватные URLs.
 
-## Подбор фильма с подтверждением
+Для диагностики сначала проверяйте:
 
-После выбора фильма в подсказках TMDb бот подбирает раздачу по сохранённым
-условиям и показывает размер, качество, озвучку, сидов и место скачивания.
-Задача создаётся только кнопкой «Скачать». Для сериалов сохранён выбор сезонов/серий.
+1. `docker compose ps` и startup health сообщения `bot-app`.
+2. Доступность PostgreSQL и применение Liquibase changesets.
+3. Telegram polling и сохранённый update offset.
+4. Доступность JacRed и время structured/fallback запросов.
+5. Доступность нужного qBittorrent endpoint для выбранной цели.
+6. Свободное место в `/downloads` для VPS и S3 staging.
+7. Home WebDAV/Tailscale или S3-конфигурацию для соответствующей доставки.
 
-В личном чате /settings (или «Настройки скачивания» в меню) задаёт:
-- размер от и до, включительно; ввод в десятичных ГБ (1 ГБ = 1 000 000 000 байт);
-- минимум сидов, от 1;
-- домашний ПК, VPS или S3 через VPS.
+## Данные и безопасность
 
-Начальные значения: 4–15 ГБ, 10 сидов, домашний ПК. Настройки хранятся в
-PostgreSQL и сохраняются после каждого изменения. «Изменить условия» в карточке
-меняет только текущую заявку. Старые кнопки перестают действовать после изменения
-условий/варианта. Карточки и незавершённый ввод живут 30/10 минут и после рестарта
-требуют повторного открытия; сохранённые настройки и ограничения созданных задач
-переживают рестарт.
+- PostgreSQL и Docker volumes переживают обычный restart/recreate контейнеров.
+- Временные download tokens имеют TTL и удаляются scheduler-ом.
+- S3 presigned URLs ограничены по времени; bucket можно держать приватным.
+- Cleanup требует явного подтверждения в Telegram.
+- `.env`, дампы, Telegram sessions, скачанные фильмы и диагностические каталоги
+  нельзя коммитить.
+- Перед публикацией логов нужно удалять токены, ключи, chat IDs и приватные адреса.
 
-Подбор исключает неизвестный размер, раздачи ниже минимума сидов и экранки.
-Приоритет: больше сидов, затем меньший размер. Ограничения применяются к размеру
-всей раздачи, а не одной серии или одному файлу. Если совпадений нет, доступны
-изменение условий и ручной выбор. Ручной выбор не применяет эти ограничения.
+## Ограничения
 
-Для заявок из нового экрана qBittorrent получает stopCondition=MetadataReceived.
-После получения metadata бот проверяет фактический размер; при выходе за диапазон
-оставляет torrent на паузе и требует отдельного подтверждения. Сборники с несколькими
-видеофайлами дополнительно проходят существующий ручной выбор файлов.
-Требуется qBittorrent с поддержкой stopCondition=MetadataReceived.
+- JacRed, TMDb, домашний qBittorrent/WebDAV, S3 и Ollama не входят в основной
+  compose как полностью управляемые сервисы.
+- Реального browser E2E для Telegram Web в CI нет; UI regression проверяет
+  Telegram-контракты, а живой интерфейс проверяется smoke-сценарием после deploy.
+- Автоматическая ежедневная очистка S3 и медиатек не реализована.
+- `.torrent` uploads, FFmpeg/transcoding, Redis, quotas и отдельный web UI не
+  являются поддерживаемыми сценариями.
+- Полная доставка большого фильма требует свободного места и доступности внешней
+  цели на протяжении операции.
 
-При выборе inline-подсказки в личном чате обработчик читает callback карточки из
-входящего сообщения. Также поддержан chosen_inline_result (если inline feedback
-включён у бота); дубли этих событий объединяются. Для inline-карточек в других
-чатах остаётся кнопка «Подобрать раздачу», открывающая личное подтверждение.
+## История этапов
+
+| Этап | Результат |
+| --- | --- |
+| MGB-01 | Ограничение частоты Telegram-обновлений прогресса. |
+| MGB-02 | Maven Wrapper, CI/CD и восстановление S3 delivery. |
+| MGB-03 | Асинхронная обработка и ускорение ответов. |
+| MGB-04 | Оптимизация JacRed structured/fallback поиска. |
+| MGB-05 | Кэширование и ускорение TMDb inline-подсказок. |
+| MGB-06 | Сохраняемые настройки, автоподбор и подтверждение скачивания. |
+| MGB-07 | UI/API regression-наборы и обязательная защита `master`. |
+
+Подробный отчёт проверки MGB-06: [`docs/confirmation-test-report.md`](docs/confirmation-test-report.md).
