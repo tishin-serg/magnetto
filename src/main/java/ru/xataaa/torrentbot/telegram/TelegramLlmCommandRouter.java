@@ -41,7 +41,11 @@ public class TelegramLlmCommandRouter {
     private final TelegramKeyboardFactory telegramKeyboardFactory;
     private final TelegramMessageService telegramMessageService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private MovieDownloadConfirmationService confirmations;
+
     public void route(Long chatId, String text) {
+        if (confirmations != null && confirmations.consumeInput(chatId, text)) return;
         if (!llmProperties.enabled() || isLegacyText(text)) {
             legacyRouter.route(chatId, text);
             return;

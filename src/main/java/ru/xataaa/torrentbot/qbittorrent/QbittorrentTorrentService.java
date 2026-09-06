@@ -23,6 +23,12 @@ public class QbittorrentTorrentService {
         addMagnet(DownloadTarget.VPS, jobId, magnetUrl);
     }
 
+    public void addMagnet(DownloadTarget downloadTarget, UUID jobId, String magnetUrl, boolean metadataOnly) {
+        var target = qbittorrentProperties.target(downloadTarget);
+        retryExecutor.executeVoid("qbittorrent.addMagnet", () ->
+                qbittorrentClient.addMagnet(downloadTarget, magnetUrl, target.downloadPath(), jobTag(jobId), metadataOnly));
+    }
+
     public void addMagnet(DownloadTarget downloadTarget, UUID jobId, String magnetUrl) {
         QbittorrentProperties.TargetProperties targetProperties = qbittorrentProperties.target(downloadTarget);
         retryExecutor.executeVoid("qbittorrent.addMagnet", () ->

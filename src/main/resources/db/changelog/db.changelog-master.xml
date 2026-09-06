@@ -253,4 +253,21 @@
             <column name="s3_object_key" type="text"/>
         </addColumn>
     </changeSet>
+    <changeSet id="010-download-preferences" author="codex">
+        <sql>
+            CREATE TABLE download_preferences (
+                chat_id BIGINT PRIMARY KEY,
+                min_bytes BIGINT NOT NULL CHECK (min_bytes &gt;= 0),
+                max_bytes BIGINT NOT NULL CHECK (max_bytes &gt; 0 AND max_bytes &gt;= min_bytes),
+                min_seeders INT NOT NULL CHECK (min_seeders &gt;= 1),
+                target VARCHAR(32) NOT NULL CHECK (target IN ('HOME_PC','VPS','S3'))
+            );
+            CREATE TABLE download_size_policy (
+                job_id UUID PRIMARY KEY REFERENCES download_job(id),
+                min_bytes BIGINT NOT NULL,
+                max_bytes BIGINT NOT NULL,
+                approved BOOLEAN NOT NULL DEFAULT FALSE
+            );
+        </sql>
+    </changeSet>
 </databaseChangeLog>

@@ -30,6 +30,9 @@ public class DownloadJobService {
     private final DiskSpaceService diskSpaceService;
     private final FileSizeFormatter fileSizeFormatter;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private DownloadSizeGuard sizeGuard;
+
     public void startDownload(Long chatId, String magnetUrl) {
         startDownload(chatId, magnetUrl, 0L, DownloadTarget.VPS);
     }
@@ -43,6 +46,11 @@ public class DownloadJobService {
     }
 
     public void startDownload(Long chatId, String magnetUrl, long expectedSizeBytes, DownloadTarget downloadTarget, String preferredTorrentName) {
+        startDownload(chatId, magnetUrl, expectedSizeBytes, downloadTarget, preferredTorrentName, null);
+    }
+
+    public void startDownload(Long chatId, String magnetUrl, long expectedSizeBytes, DownloadTarget downloadTarget,
+            String preferredTorrentName, ru.xataaa.torrentbot.preferences.DownloadPreferences preferences) {
         if (!appProperties.isChatAllowed(chatId)) {
             telegramMessageService.sendText(chatId, "Доступ запрещён.");
             log.warn("Access denied: chatId={}", chatId);
@@ -72,7 +80,8 @@ public class DownloadJobService {
                 .updatedAt(now)
                 .build();
 
-        downloadJobRepository.save(downloadJob);
+        if (preferences != null) sizeGuard.saveJob(downloadJob, preferences);
+        else downloadJobRepository.save(downloadJob);
         log.info("Creating download job: jobId={}, chatId={}, downloadTarget={}", jobId, chatId, effectiveDownloadTarget);
         String acceptedText = "Задача принята.\nКуда скачивать: " + targetLabel(effectiveDownloadTarget) + ".\nЯ начну загрузку и буду обновлять этот статус.";
         Long statusMessageId = telegramMessageService.sendText(chatId, acceptedText).getMessageId();

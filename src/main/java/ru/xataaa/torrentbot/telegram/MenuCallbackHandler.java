@@ -38,6 +38,8 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
     private final TimeProvider timeProvider;
     private final TaskOverviewService taskOverviewService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private MovieDownloadConfirmationService confirmations;
     @Override
     public boolean supports(String data) {
         return data != null && data.startsWith("menu:");
@@ -46,6 +48,7 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
     @Override
     public void handle(String callbackQueryId, Long chatId, Long messageId, String data) {
         telegramMessageService.answerCallbackQuery(callbackQueryId, "Готово");
+        if ("menu:settings".equals(data)) { confirmations.settings(chatId); return; }
         if ("menu:search".equals(data)) {
             log.info("search_opened: chatId={}", chatId);
             editOrSend(chatId, messageId, searchHelpText(), telegramKeyboardFactory.searchLauncherKeyboard());
