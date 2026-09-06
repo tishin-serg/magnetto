@@ -18,6 +18,8 @@ public class S3MediaCallbackHandler implements TelegramCallbackHandler {
     private static final String DOWNLOAD_PREFIX = "s3:download:";
     private static final String DELETE_ASK_PREFIX = "s3:delete:ask:";
     private static final String DELETE_CONFIRM_PREFIX = "s3:delete:confirm:";
+    private static final String DELETE_CANCEL_PREFIX = "s3:delete:cancel:";
+    private final FileDeletionConfirmation confirmation = new FileDeletionConfirmation();
 
     private final S3MediaLibraryService s3MediaLibraryService;
     private final TelegramMessageService telegramMessageService;
@@ -30,12 +32,18 @@ public class S3MediaCallbackHandler implements TelegramCallbackHandler {
         return data != null && (data.startsWith(FILE_PREFIX)
                 || data.startsWith(DOWNLOAD_PREFIX)
                 || data.startsWith(DELETE_ASK_PREFIX)
-                || data.startsWith(DELETE_CONFIRM_PREFIX));
+                || data.startsWith(DELETE_CONFIRM_PREFIX) || data.startsWith(DELETE_CANCEL_PREFIX));
     }
 
     @Override
     public void handle(String callbackQueryId, Long chatId, Long messageId, String data) {
         try {
+            if (data.startsWith(DELETE_CANCEL_PREFIX)) {
+                confirmation.cancel(chatId, messageId, data.substring(DELETE_CANCEL_PREFIX.length()));
+                telegramMessageService.answerCallbackQuery(callbackQueryId, "Удаление отменено");
+                editOrSend(chatId, messageId, "Удаление отменено. Файл сохранён.", telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:s3"));
+                return;
+            }
             if (data.startsWith(FILE_PREFIX)) {
                 showFile(callbackQueryId, chatId, messageId, data.substring(FILE_PREFIX.length()));
                 return;
@@ -84,17 +92,23 @@ public class S3MediaCallbackHandler implements TelegramCallbackHandler {
         if (file == null) {
             return;
         }
+        confirmation.ask(chatId, messageId, fileKey, file);
         String text = "Удалить файл из S3 медиатеки?\n\n"
                 + file.fileName() + "\n"
                 + "Размер: " + fileSizeFormatter.format(file.sizeBytes()) + "\n\n"
-                + "Будет удалён только этот объект внутри настроенного S3 prefix.";
+                + "Это нельзя отменить.";
         editOrSend(chatId, messageId, text, telegramKeyboardFactory.s3FileDeleteConfirmKeyboard(fileKey));
     }
 
     private void confirmDelete(String callbackQueryId, Long chatId, Long messageId, String fileKey) {
-        telegramMessageService.answerCallbackQuery(callbackQueryId, "Удаляю файл");
+        telegramMessageService.answerCallbackQuery(callbackQueryId, "");
         S3MediaLibraryFile file = findFile(fileKey, chatId, messageId);
         if (file == null) {
+            return;
+        }
+        if (!confirmation.consume(chatId, messageId, fileKey, file)) {
+            editOrSend(chatId, messageId, "Подтверждение устарело или файл изменился. Открой файл заново перед удалением.",
+                    telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:s3"));
             return;
         }
         s3MediaLibraryService.deleteFile(file.objectKey());

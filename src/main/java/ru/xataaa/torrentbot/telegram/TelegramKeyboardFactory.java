@@ -15,26 +15,53 @@ public class TelegramKeyboardFactory {
     public String mainMenuKeyboard() {
         return """
                 {"inline_keyboard":[
-                  [{"text":"Найти фильм","callback_data":"menu:search"}],
-                  [{"text":"Задачи","callback_data":"menu:tasks"}],
-                  [{"text":"Настройки скачивания","callback_data":"menu:settings"}],
-                  [{"text":"Домашняя медиатека","callback_data":"menu:library:home"}],
-                  [{"text":"VPS медиатека","callback_data":"menu:library:vps"}],
-                  [{"text":"S3 медиатека","callback_data":"menu:library:s3"}],
-                  [{"text":"Свободное место","callback_data":"menu:space"}],
-                  [{"text":"Очистить медиатеку","callback_data":"media:cleanup:ask"}],
-                  [{"text":"Инструкция iPhone","callback_data":"menu:iphone"}]
+                  [{"text":"🔎 Поиск","callback_data":"menu:search"}],
+                  [{"text":"📥 Загрузки","callback_data":"menu:tasks"},{"text":"🎬 Медиатека","callback_data":"menu:libraries"}],
+                  [{"text":"⚙️ Настройки","callback_data":"menu:settings"},{"text":"Помощь","callback_data":"menu:help"}]
                 ]}
                 """;
+    }
+
+    public String persistentKeyboard() {
+        return """
+                {"keyboard":[[{"text":"🔎 Поиск"},{"text":"📥 Загрузки"}],
+                [{"text":"🎬 Медиатека"},{"text":"⚙️ Настройки"}]],
+                "resize_keyboard":true,"is_persistent":true,"input_field_placeholder":"Название фильма или magnet-ссылка"}
+                """;
+    }
+
+    public String libraryMenuKeyboard() {
+        return """
+                {"inline_keyboard":[
+                [{"text":"Домашний ПК","callback_data":"menu:library:home"},{"text":"Сервер · VPS","callback_data":"menu:library:vps"}],
+                [{"text":"Облако · S3","callback_data":"menu:library:s3"}],
+                [{"text":"Свободное место","callback_data":"menu:space"}],
+                [{"text":"🗑 Очистить медиатеку","callback_data":"media:cleanup:ask"}],
+                [{"text":"🏠 Главное меню","callback_data":"menu:home"}]]}
+                """;
+    }
+
+    public String helpKeyboard() {
+        return """
+                {"inline_keyboard":[[{"text":"Смотреть на iPhone","callback_data":"menu:iphone"}],
+                [{"text":"🔎 Поиск","callback_data":"menu:search"}],
+                [{"text":"🏠 Главное меню","callback_data":"menu:home"}]]}
+                """;
+    }
+
+    public String libraryRecoveryKeyboard(String callback) {
+        return "{\"inline_keyboard\":[[{\"text\":\"Обновить\",\"callback_data\":\"" + escapeJson(callback)
+                + "\"}],[{\"text\":\"🔎 Поиск\",\"callback_data\":\"menu:search\"}],"
+                + "[{\"text\":\"← Медиатека\",\"callback_data\":\"menu:libraries\"}]]}";
     }
 
     public String cleanupConfirmKeyboard() {
         return """
                 {"inline_keyboard":[
-                  [{"text":"Очистить медиатеку VPS","callback_data":"media:cleanup:confirm:local"}],
-                  [{"text":"Очистить домашнюю медиатеку","callback_data":"media:cleanup:confirm:home"}],
-                  [{"text":"Очистить S3 медиатеку","callback_data":"media:cleanup:confirm:s3"}],
-                  [{"text":"Отмена","callback_data":"menu:home"}]
+                  [{"text":"Сервер · VPS","callback_data":"media:cleanup:confirm:local"}],
+                  [{"text":"Домашний ПК","callback_data":"media:cleanup:confirm:home"}],
+                  [{"text":"Облако · S3","callback_data":"media:cleanup:confirm:s3"}],
+                  [{"text":"❌ Отмена","callback_data":"menu:libraries"}]
                 ]}
                 """;
     }
@@ -42,7 +69,7 @@ public class TelegramKeyboardFactory {
     public String backToMenuKeyboard() {
         return """
                 {"inline_keyboard":[
-                  [{"text":"Назад в меню","callback_data":"menu:home"}]
+                  [{"text":"🏠 Главное меню","callback_data":"menu:home"}]
                 ]}
                 """;
     }
@@ -50,8 +77,8 @@ public class TelegramKeyboardFactory {
     public String searchLauncherKeyboard() {
         return """
                 {"inline_keyboard":[
-                  [{"text":"Найти через TMDb","switch_inline_query_current_chat":""}],
-                  [{"text":"Назад в меню","callback_data":"menu:home"}]
+                  [{"text":"🔎 Поиск с подсказками","switch_inline_query_current_chat":""}],
+                  [{"text":"🏠 Главное меню","callback_data":"menu:home"}]
                 ]}
                 """;
     }
@@ -79,7 +106,7 @@ public class TelegramKeyboardFactory {
         keyboard.append("[{\"text\":\"Обновить\",\"callback_data\":\"menu:library:home:page:")
                 .append(normalizePage(homeItems, page, pageSize))
                 .append("\"}],");
-        keyboard.append("[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}");
+        keyboard.append("[{\"text\":\"← Медиатека\",\"callback_data\":\"menu:libraries\"}]]}");
         return keyboard.toString();
     }
 
@@ -103,8 +130,8 @@ public class TelegramKeyboardFactory {
                 .append(":page:")
                 .append(normalizePage(folderFiles, page, pageSize))
                 .append("\"}],");
-        keyboard.append("[{\"text\":\"Назад к медиатеке\",\"callback_data\":\"menu:library:home\"}],");
-        keyboard.append("[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}");
+        keyboard.append("[{\"text\":\"← Медиатека\",\"callback_data\":\"menu:library:home\"}],");
+        keyboard.append("[{\"text\":\"🏠 Главное меню\",\"callback_data\":\"menu:home\"}]]}");
         return keyboard.toString();
     }
 
@@ -123,15 +150,15 @@ public class TelegramKeyboardFactory {
         keyboard.append("[{\"text\":\"Удалить файл\",\"callback_data\":\"home:delete:ask:")
                 .append(escapeJson(fileKey))
                 .append("\"}],");
-        keyboard.append("[{\"text\":\"Назад к медиатеке\",\"callback_data\":\"menu:library:home\"}]]}");
+        keyboard.append("[{\"text\":\"← Медиатека\",\"callback_data\":\"menu:library:home\"}]]}");
         return keyboard.toString();
     }
 
     public String homeFileDeleteConfirmKeyboard(String fileKey) {
         return "{\"inline_keyboard\":["
                 + "[{\"text\":\"Да, удалить файл\",\"callback_data\":\"home:delete:confirm:" + escapeJson(fileKey) + "\"}],"
-                + "[{\"text\":\"Отмена\",\"callback_data\":\"home:file:" + escapeJson(fileKey) + "\"}],"
-                + "[{\"text\":\"Назад к медиатеке\",\"callback_data\":\"menu:library:home\"}]]}";
+                + "[{\"text\":\"❌ Отмена\",\"callback_data\":\"home:delete:cancel:" + escapeJson(fileKey) + "\"}],"
+                + "[{\"text\":\"← Медиатека\",\"callback_data\":\"menu:library:home\"}]]}";
     }
 
     public String homePcFinishedKeyboard() {
@@ -139,7 +166,7 @@ public class TelegramKeyboardFactory {
                 {"inline_keyboard":[
                   [{"text":"Домашняя медиатека","callback_data":"menu:library:home"}],
                   [{"text":"Инструкция iPhone","callback_data":"menu:iphone"}],
-                  [{"text":"Назад в меню","callback_data":"menu:home"}]
+                  [{"text":"🏠 Главное меню","callback_data":"menu:home"}]
                 ]}
                 """;
     }
@@ -148,7 +175,7 @@ public class TelegramKeyboardFactory {
         return "{\"inline_keyboard\":["
                 + "[{\"text\":\"Скачать\",\"callback_data\":\"s3:download:" + escapeJson(fileKey) + "\"}],"
                 + "[{\"text\":\"Удалить файл\",\"callback_data\":\"s3:delete:ask:" + escapeJson(fileKey) + "\"}],"
-                + "[{\"text\":\"Назад к S3 медиатеке\",\"callback_data\":\"menu:library:s3\"}]]}";
+                + "[{\"text\":\"← Медиатека S3\",\"callback_data\":\"menu:library:s3\"}]]}";
     }
 
     public String s3FileDownloadKeyboard(String fileKey, String url) {
@@ -158,18 +185,18 @@ public class TelegramKeyboardFactory {
         if (hasButton) {
             keyboard.append(",");
         }
-        keyboard.append("[{\"text\":\"Назад к файлу\",\"callback_data\":\"s3:file:")
+        keyboard.append("[{\"text\":\"← Файл\",\"callback_data\":\"s3:file:")
                 .append(escapeJson(fileKey))
                 .append("\"}],");
-        keyboard.append("[{\"text\":\"Назад к S3 медиатеке\",\"callback_data\":\"menu:library:s3\"}]]}");
+        keyboard.append("[{\"text\":\"← Медиатека S3\",\"callback_data\":\"menu:library:s3\"}]]}");
         return keyboard.toString();
     }
 
     public String s3FileDeleteConfirmKeyboard(String fileKey) {
         return "{\"inline_keyboard\":["
                 + "[{\"text\":\"Да, удалить файл\",\"callback_data\":\"s3:delete:confirm:" + escapeJson(fileKey) + "\"}],"
-                + "[{\"text\":\"Отмена\",\"callback_data\":\"s3:file:" + escapeJson(fileKey) + "\"}],"
-                + "[{\"text\":\"Назад к S3 медиатеке\",\"callback_data\":\"menu:library:s3\"}]]}";
+                + "[{\"text\":\"❌ Отмена\",\"callback_data\":\"s3:delete:cancel:" + escapeJson(fileKey) + "\"}],"
+                + "[{\"text\":\"← Медиатека S3\",\"callback_data\":\"menu:library:s3\"}]]}";
     }
 
     public String s3MediaLibraryKeyboard(List<S3MediaLibraryFile> files, S3MediaLibraryService s3MediaLibraryService, int page, int pageSize) {
@@ -183,7 +210,7 @@ public class TelegramKeyboardFactory {
         keyboard.append("[{\"text\":\"Обновить\",\"callback_data\":\"menu:library:s3:page:")
                 .append(normalizePage(files, page, pageSize))
                 .append("\"}],");
-        keyboard.append("[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}");
+        keyboard.append("[{\"text\":\"← Медиатека\",\"callback_data\":\"menu:libraries\"}]]}");
         return keyboard.toString();
     }
 
@@ -205,7 +232,8 @@ public class TelegramKeyboardFactory {
         if (hasButton) {
             keyboard.append(",");
         }
-        keyboard.append("[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}");
+        keyboard.append("[{\"text\":\"🔎 Поиск\",\"callback_data\":\"menu:search\"}],");
+        keyboard.append("[{\"text\":\"← Медиатека\",\"callback_data\":\"menu:libraries\"}]]}");
         return keyboard.toString();
     }
 

@@ -17,11 +17,13 @@ public class TelegramBotCommandInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         String commandsJson = """
                 [
+                  {"command":"start","description":"Главное меню"},
                   {"command":"search","description":"Найти фильм или сериал"},
                   {"command":"library","description":"Открыть медиатеку"},
-                  {"command":"tasks","description":"Показать задачи"},
+                  {"command":"tasks","description":"Загрузки"},
                   {"command":"settings","description":"Настройки"},
-                  {"command":"help","description":"Помощь"}
+                  {"command":"help","description":"Помощь"},
+                  {"command":"cancel","description":"Выйти из ввода"}
                 ]
                 """;
         try {

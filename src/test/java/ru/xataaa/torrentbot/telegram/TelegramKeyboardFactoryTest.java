@@ -27,12 +27,15 @@ class TelegramKeyboardFactoryTest {
                 "menu:search",
                 "menu:tasks",
                 "menu:settings",
+                "menu:libraries",
+                "menu:help"
+        );
+        assertThat(callbacks(factory.libraryMenuKeyboard())).contains(
                 "menu:library:home",
                 "menu:library:vps",
                 "menu:library:s3",
                 "menu:space",
-                "media:cleanup:ask",
-                "menu:iphone"
+                "media:cleanup:ask"
         );
     }
 
@@ -42,7 +45,7 @@ class TelegramKeyboardFactoryTest {
                 "media:cleanup:confirm:local",
                 "media:cleanup:confirm:home",
                 "media:cleanup:confirm:s3",
-                "menu:home"
+                "menu:libraries"
         );
     }
 
@@ -51,11 +54,11 @@ class TelegramKeyboardFactoryTest {
         assertThat(callbacks(factory.homeFileKeyboard("home-key", "http://tailscale/file", "http://lan/file")))
                 .containsExactlyInAnyOrder("home:link:home-key", "home:delete:ask:home-key", "menu:library:home");
         assertThat(callbacks(factory.homeFileDeleteConfirmKeyboard("home-key")))
-                .containsExactlyInAnyOrder("home:delete:confirm:home-key", "home:file:home-key", "menu:library:home");
+                .containsExactlyInAnyOrder("home:delete:confirm:home-key", "home:delete:cancel:home-key", "menu:library:home");
         assertThat(callbacks(factory.s3FileKeyboard("s3-key")))
                 .containsExactlyInAnyOrder("s3:download:s3-key", "s3:delete:ask:s3-key", "menu:library:s3");
         assertThat(callbacks(factory.s3FileDeleteConfirmKeyboard("s3-key")))
-                .containsExactlyInAnyOrder("s3:delete:confirm:s3-key", "s3:file:s3-key", "menu:library:s3");
+                .containsExactlyInAnyOrder("s3:delete:confirm:s3-key", "s3:delete:cancel:s3-key", "menu:library:s3");
     }
 
     @Test
@@ -66,7 +69,7 @@ class TelegramKeyboardFactoryTest {
 
         String keyboard = factory.s3MediaLibraryKeyboard(List.of(file), s3MediaLibraryService, 0, 10);
 
-        assertThat(keyboard).contains("s3:file:file-key", "menu:library:s3:page:0", "Назад в меню");
+        assertThat(keyboard).contains("s3:file:file-key", "menu:library:s3:page:0", "menu:libraries");
     }
 
     private Set<String> callbacks(String keyboard) throws Exception {

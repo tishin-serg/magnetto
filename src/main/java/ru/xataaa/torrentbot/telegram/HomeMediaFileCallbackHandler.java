@@ -37,7 +37,7 @@ public class HomeMediaFileCallbackHandler implements TelegramCallbackHandler {
                         chatId,
                         messageId,
                         "Не нашёл этот файл в домашней медиатеке. Нажми «Обновить» и попробуй ещё раз.",
-                        telegramKeyboardFactory.backToMenuKeyboard()
+                        telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:home")
                 );
                 return;
             }
@@ -52,7 +52,7 @@ public class HomeMediaFileCallbackHandler implements TelegramCallbackHandler {
                     chatId,
                     messageId,
                     "Домашний WebDAV сейчас недоступен. Проверь домашний ПК и Tailscale, потом обнови медиатеку.",
-                    telegramKeyboardFactory.backToMenuKeyboard()
+                    telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:home")
             );
         }
     }
@@ -72,10 +72,7 @@ public class HomeMediaFileCallbackHandler implements TelegramCallbackHandler {
                     .append(timeProvider.formatDateTime(file.modifiedAt()))
                     .append("\n");
         }
-        text.append("\n")
-                .append("Чтобы скачать на iPhone без WebDAV-пароля, нажми «Скачать на iPhone». ")
-                .append("Я создам временную публичную ссылку на этот конкретный файл.\n\n")
-                .append("Для больших фильмов стабильнее Infuse/WebDAV через Tailscale, но временная ссылка удобнее для разового скачивания.");
+        text.append("\n«Скачать на iPhone» создаст временную ссылку. Любой, у кого она есть, сможет скачать файл до её истечения.");
         return text.toString();
     }
 

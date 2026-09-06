@@ -19,6 +19,6 @@ public class LibraryCommandHandler implements TelegramMessageHandler {
 
     @Override
     public void handle(Long chatId, String text) {
-        telegramMessageService.sendTextWithInlineKeyboard(chatId, menuCallbackHandler.mediaLibraryText(), menuCallbackHandler.mediaLibraryKeyboard());
+        menuCallbackHandler.handle(null, chatId, null, "menu:libraries");
     }
 }

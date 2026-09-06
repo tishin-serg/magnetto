@@ -30,21 +30,33 @@ public class DownloadTargetSelectionCallbackHandler implements TelegramCallbackH
             return;
         }
         String selectionId = parts[0];
-        DownloadTarget downloadTarget = DownloadTarget.fromValue(parts[1]);
         DownloadTargetSelectionCache.PendingDownload pendingDownload = downloadTargetSelectionCache.find(selectionId, chatId).orElse(null);
         if (pendingDownload == null) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Выбор устарел");
-            telegramMessageService.editText(chatId, messageId, "Этот выбор устарел. Отправь magnet или выбери раздачу ещё раз.", null);
+            telegramMessageService.editText(chatId, messageId, "Этот выбор устарел. Проверь загрузки перед повторным запуском.", new TelegramKeyboardFactory().mainMenuKeyboard());
             return;
         }
+        if (parts[1].equals("CANCEL")) {
+            if (!downloadTargetSelectionCache.consume(selectionId, pendingDownload)) {
+                telegramMessageService.answerCallbackQuery(callbackQueryId, "Заявка уже обработана. Проверь загрузки.");
+                return;
+            }
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Заявка отменена");
+            telegramMessageService.editText(chatId, messageId, "Заявка отменена. Загрузка не запускалась.", new TelegramKeyboardFactory().mainMenuKeyboard());
+            return;
+        }
+        DownloadTarget downloadTarget = DownloadTarget.fromValue(parts[1]);
         if (downloadTarget.isS3() && !isS3Ready()) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "S3 не настроен");
             telegramMessageService.editText(chatId, messageId,
-                    "S3 сейчас выключен или не настроен. Проверь MEDIA_S3_ENABLED, MEDIA_S3_BUCKET, MEDIA_S3_ACCESS_KEY и MEDIA_S3_SECRET_KEY, потом выбери раздачу ещё раз.",
-                    null);
+                    "Облако S3 недоступно. Выбери домашний ПК или сервер VPS.",
+                    DownloadTargetSelectionService.keyboard(selectionId));
             return;
         }
-        downloadTargetSelectionCache.remove(selectionId);
+        if (!downloadTargetSelectionCache.consume(selectionId, pendingDownload)) {
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Заявка уже обработана. Проверь загрузки.");
+            return;
+        }
         telegramMessageService.answerCallbackQuery(callbackQueryId, "Запускаю загрузку");
         telegramMessageService.editText(chatId, messageId, "Выбрано: " + targetLabel(downloadTarget) + ". Создаю задачу...", null);
         downloadJobService.startDownload(chatId, pendingDownload.magnetUrl(), pendingDownload.expectedSizeBytes(), downloadTarget, pendingDownload.title());

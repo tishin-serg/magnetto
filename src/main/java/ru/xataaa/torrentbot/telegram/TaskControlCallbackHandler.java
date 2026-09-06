@@ -86,8 +86,10 @@ public class TaskControlCallbackHandler implements TelegramCallbackHandler {
     }
 
     private DownloadJob findJob(String jobIdValue) {
-        UUID jobId = UUID.fromString(jobIdValue);
-        return downloadJobRepository.findById(jobId).orElse(null);
+        try {
+            UUID jobId = UUID.fromString(jobIdValue);
+            return downloadJobRepository.findById(jobId).orElse(null);
+        } catch (IllegalArgumentException exception) { return null; }
     }
 
     private boolean canPause(DownloadJob downloadJob) {

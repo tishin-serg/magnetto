@@ -46,11 +46,8 @@ public class TorrentSelectCallbackHandler implements TelegramCallbackHandler {
         if (!validateResult(callbackQueryId, chatId, torrentSearchResult)) {
             return;
         }
-        if (requiresSeasonPackConfirmation(torrentSearchResult)) {
-            telegramMessageService.answerCallbackQuery(callbackQueryId, "Нужно подтверждение");
-            telegramMessageService.sendTextWithInlineKeyboard(chatId, seasonPackConfirmationText(torrentSearchResult), seasonPackConfirmationKeyboard(selectionId));
-            return;
-        }
+        // The target screen shows the full size; multi-file torrents still stop for file selection.
+        // Keep torrent:confirm callbacks above for cards sent by older versions.
         startTargetSelection(callbackQueryId, chatId, torrentSearchResult);
     }
 
@@ -77,7 +74,7 @@ public class TorrentSelectCallbackHandler implements TelegramCallbackHandler {
     }
 
     private void startTargetSelection(String callbackQueryId, Long chatId, TorrentSearchResult torrentSearchResult) {
-        telegramMessageService.answerCallbackQuery(callbackQueryId, "Запускаю загрузку");
+        telegramMessageService.answerCallbackQuery(callbackQueryId, "Выбери место скачивания");
         log.info("Torrent selected from search: chatId={}, title={}, seeders={}",
                 chatId, torrentSearchResult.title(), torrentSearchResult.seeders());
         downloadTargetSelectionService.askTarget(chatId, torrentSearchResult.magnetUri(), torrentSearchResult.sizeBytes(), torrentSearchResult.title());
@@ -121,7 +118,7 @@ public class TorrentSelectCallbackHandler implements TelegramCallbackHandler {
         if (torrentSearchResult.sizeBytes() > 0) {
             text.append("Размер всей раздачи: ").append(fileSizeFormatter.format(torrentSearchResult.sizeBytes())).append("\n");
         }
-        text.append("\nПосле выбора места я загружу metadata, остановлю torrent и покажу файлы/серии для выбора. ");
+        text.append("\nПосле выбора места покажу список серий. ");
         text.append("Скачивание продолжится только после кнопки «Скачать выбранные» или явного выбора «Скачать всё».");
         return text.toString();
     }

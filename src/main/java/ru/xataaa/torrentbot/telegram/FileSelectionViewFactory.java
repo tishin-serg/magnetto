@@ -35,7 +35,7 @@ public class FileSelectionViewFactory {
 
         StringBuilder text = new StringBuilder();
         text.append("Что скачать из раздачи?\n\n");
-        text.append("Внутри torrent несколько видеофайлов. Отметь только нужные серии или файлы.\n\n");
+        text.append("Отметь нужные серии или файлы.\n\n");
         text.append("Выбрано: ").append(selectedCount).append(" из ").append(files.size()).append("\n");
         text.append("Общий размер выбранного: ").append(fileSizeFormatter.format(selectedBytes)).append("\n");
         text.append("Страница: ").append(page + 1).append(" из ").append(totalPages).append("\n\n");
@@ -52,7 +52,7 @@ public class FileSelectionViewFactory {
                     .append("\n");
         }
 
-        text.append("\nСкачивание продолжится только после «Скачать выбранные». «Скачать всё» означает весь показанный набор файлов.");
+        text.append("\nЗагрузка ждёт выбора. Можно вернуться к нему через «Загрузки».");
         return text.toString();
     }
 
@@ -67,7 +67,7 @@ public class FileSelectionViewFactory {
         keyboard.append("[{\"text\":\"Скачать выбранные\",\"callback_data\":\"file:select:done:")
                 .append(jobId)
                 .append("\"}],");
-        keyboard.append("[{\"text\":\"Скачать всё явно\",\"callback_data\":\"file:select:all:")
+        keyboard.append("[{\"text\":\"Скачать всё\",\"callback_data\":\"file:select:all:")
                 .append(jobId)
                 .append("\"}]");
 
@@ -76,10 +76,11 @@ public class FileSelectionViewFactory {
             String mark = file.getStatus() == DownloadFileStatus.READY_TO_UPLOAD ? "✅ " : "⬜ ";
             keyboard.append(",[{\"text\":\"")
                     .append(escapeJson(mark + shorten(file.getFileName(), BUTTON_FILE_NAME_LIMIT)))
-                    .append("\",\"callback_data\":\"file:toggle:")
+                    .append("\",\"callback_data\":\"file:set:")
                     .append(file.getId())
                     .append(":")
                     .append(page)
+                    .append(file.getStatus() == DownloadFileStatus.READY_TO_UPLOAD ? ":0" : ":1")
                     .append("\"}]");
         }
 
@@ -107,7 +108,7 @@ public class FileSelectionViewFactory {
             keyboard.append("]");
         }
 
-        keyboard.append("]}");
+        keyboard.append(",[{\"text\":\"Выбрать позже\",\"callback_data\":\"menu:tasks\"}]]}");
         return keyboard.toString();
     }
 

@@ -143,7 +143,7 @@ public class MovieSelectionCallbackHandler implements TelegramCallbackHandler {
         if (movieMetadata == null) {
             if (callbackQueryId != null) telegramMessageService.answerCallbackQuery(callbackQueryId, "Карточка устарела");
             if (chatId != null) {
-                telegramMessageService.sendText(chatId, "Карточка фильма устарела. Повтори поиск ещё раз.");
+                telegramMessageService.sendTextWithInlineKeyboard(chatId, "Карточка фильма устарела. Найди фильм заново.", new TelegramKeyboardFactory().searchLauncherKeyboard());
             }
             return;
         }
@@ -171,7 +171,7 @@ public class MovieSelectionCallbackHandler implements TelegramCallbackHandler {
         if (session == null) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Фильтры устарели");
             if (chatId != null) {
-                telegramMessageService.sendText(chatId, "Фильтры поиска устарели. Открой карточку фильма ещё раз.");
+                telegramMessageService.sendTextWithInlineKeyboard(chatId, "Фильтры поиска устарели. Найди фильм заново.", new TelegramKeyboardFactory().searchLauncherKeyboard());
             }
             return;
         }
@@ -204,7 +204,7 @@ public class MovieSelectionCallbackHandler implements TelegramCallbackHandler {
             log.warn("movie_torrent_search_failed: chatId={}, searchSessionId={}, tmdbId={}, error={}",
                     chatId, session.sessionId(), session.movieMetadata().tmdbId(), runtimeException.getMessage());
             if (chatId != null) {
-                telegramMessageService.sendText(chatId, "Поиск раздач временно недоступен. Внешний источник не ответил, попробуй ещё раз позже или измени фильтры.");
+                render(chatId, messageId, "Источник раздач не ответил. Попробуй позже или измени условия поиска.", movieSearchViewFactory.noResultsKeyboard(session));
             }
         }
     }

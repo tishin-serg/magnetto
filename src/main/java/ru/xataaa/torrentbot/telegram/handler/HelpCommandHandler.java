@@ -21,6 +21,6 @@ public class HelpCommandHandler implements TelegramMessageHandler {
 
     @Override
     public void handle(Long chatId, String text) {
-        telegramMessageService.sendTextWithInlineKeyboard(chatId, menuCallbackHandler.mainMenuText(), telegramKeyboardFactory.mainMenuKeyboard());
+        telegramMessageService.sendTextWithInlineKeyboard(chatId, menuCallbackHandler.helpText(), telegramKeyboardFactory.helpKeyboard());
     }
 }

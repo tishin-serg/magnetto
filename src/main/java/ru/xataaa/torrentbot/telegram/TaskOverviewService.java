@@ -23,11 +23,11 @@ public class TaskOverviewService {
     public String text() {
         List<DownloadJob> jobs = downloadJobRepository.findRecent(MAX_JOBS_IN_OVERVIEW);
         if (jobs.isEmpty()) {
-            return "Активных и завершённых задач пока нет.";
+            return "📥 Загрузки\n\nЗагрузок пока нет. Найди фильм или отправь magnet-ссылку — здесь появится ход скачивания.";
         }
 
         StringBuilder text = new StringBuilder();
-        text.append("Задачи\n\n");
+        text.append("📥 Загрузки\n\n");
         for (int index = 0; index < jobs.size(); index++) {
             DownloadJob job = jobs.get(index);
             text.append(index + 1)
@@ -47,7 +47,6 @@ public class TaskOverviewService {
             }
             text.append("ID: ").append(shortJobId(job.getId())).append("\n\n");
         }
-        text.append("Кнопками ниже можно поставить задачу на паузу, продолжить её или обновить список.");
         return truncate(text.toString());
     }
 
@@ -57,6 +56,13 @@ public class TaskOverviewService {
         keyboard.append("{\"inline_keyboard\":[");
         boolean hasRow = false;
         for (DownloadJob job : jobs) {
+            if (job.getStatus() == DownloadJobStatus.WAITING_FILE_SELECTION) {
+                if (hasRow) keyboard.append(",");
+                keyboard.append("[{\"text\":\"Выбрать файлы · ").append(escapeJson(shortName(job)))
+                        .append("\",\"callback_data\":\"file:select:page:").append(job.getId()).append(":0\"}]");
+                hasRow = true;
+                continue;
+            }
             if (!isControllable(job.getStatus())) {
                 continue;
             }
@@ -74,7 +80,8 @@ public class TaskOverviewService {
             keyboard.append(",");
         }
         keyboard.append("[{\"text\":\"Обновить\",\"callback_data\":\"task:list\"}],");
-        keyboard.append("[{\"text\":\"Назад в меню\",\"callback_data\":\"menu:home\"}]]}");
+        keyboard.append("[{\"text\":\"🔎 Поиск\",\"callback_data\":\"menu:search\"}],");
+        keyboard.append("[{\"text\":\"🏠 Главное меню\",\"callback_data\":\"menu:home\"}]]}");
         return keyboard.toString();
     }
 
@@ -87,9 +94,9 @@ public class TaskOverviewService {
 
     private String actionText(DownloadJob job) {
         if (job.getStatus() == DownloadJobStatus.PAUSED_BY_USER) {
-            return "Продолжить " + shortJobId(job.getId()) + " " + shortName(job);
+            return "Продолжить · " + shortName(job);
         }
-        return "Пауза " + shortJobId(job.getId()) + " " + shortName(job);
+        return "Пауза · " + shortName(job);
     }
 
     private String actionCallback(DownloadJob job) {
@@ -115,10 +122,22 @@ public class TaskOverviewService {
     }
 
     private String statusLabel(DownloadJob job) {
-        if (job.getStatus() == DownloadJobStatus.RETRY_WAITING && job.getResumeStatus() != null) {
-            return "ожидает повторной попытки (" + job.getResumeStatus().name() + ")";
-        }
-        return job.getStatus().name();
+        return switch (job.getStatus()) {
+            case QUEUED -> "В очереди";
+            case CREATED, ADDING_TO_QBITTORRENT, ADDED_TO_QBITTORRENT -> "Подготовка загрузки";
+            case WAITING_METADATA -> "Получаю список файлов";
+            case WAITING_SIZE_CONFIRMATION -> "Нужно подтвердить размер в сообщении загрузки";
+            case WAITING_FILE_SELECTION -> "Нужно выбрать файлы в сообщении загрузки";
+            case DOWNLOADING -> "Скачивается";
+            case PAUSED_BY_USER -> "На паузе";
+            case DOWNLOAD_COMPLETED, DISCOVERING_FILES, DELIVERY_PENDING -> "Готовлю файлы к отправке";
+            case UPLOADING_TO_TELEGRAM -> "Отправляю в Telegram";
+            case UPLOADING_TO_S3 -> "Отправляю в S3";
+            case S3_UPLOADED, DELIVERY_COMPLETED, CLEANUP_PENDING, CLEANING_UP, CLEANUP_COMPLETED -> "Файлы доставлены · завершаю задачу";
+            case FINISHED -> "Готово · файл в медиатеке или чате";
+            case RETRY_WAITING, FAILED_RECOVERABLE -> "Временный сбой · повторю автоматически";
+            case FAILED_FINAL -> "Не удалось завершить · попробуй создать загрузку заново";
+        };
     }
 
     private String targetLabel(DownloadTarget downloadTarget) {
