@@ -508,10 +508,17 @@ qBittorrent, Home WebDAV, download endpoints и S3.
 GitHub Actions:
 
 1. Pull request в `master` запускает `UI Regression` и `API Regression` параллельно.
-2. После них запускается полный `Test` и сборка JAR.
+2. После них `Test` запускает только остальные тесты (без тегов `ui-regression`
+   и `api-regression`) и собирает JAR без повторного выполнения тестов.
 3. Все три checks обязательны защитой ветки `master`.
 4. Push merge-коммита в `master` повторяет проверки и развёртывает production.
 5. `workflow_dispatch` позволяет вручную собрать и развернуть выбранную ветку.
+
+В MGB-10 устранён повторный запуск регрессионных тестов внутри одного workflow.
+Тест с обоими тегами выполняется только в `UI Regression`; `API Regression`
+исключает UI-тег. Непомеченные тесты остаются в `Test`. Названия обязательных
+checks сохранены. Локальный `verify` по-прежнему проверяет весь набор.
+Повторная проверка merge-коммита после PR сохранена: это другой Git-коммит.
 
 Правила веток, коммитов и выкладки: [`AGENTS.md`](AGENTS.md). Правила версий и
 тегов: [`VERSIONING.md`](VERSIONING.md).

@@ -46,7 +46,7 @@ jobs:
           cache: maven
 
       - name: Run API regression tests
-        run: .\mvnw.cmd -Dgroups=api-regression test
+        run: .\mvnw.cmd "-Dgroups=api-regression" "-DexcludedGroups=ui-regression" test
 
   test:
     name: Test
@@ -65,8 +65,8 @@ jobs:
           java-version: 21
           cache: maven
 
-      - name: Run tests
-        run: .\mvnw.cmd test
+      - name: Run remaining tests
+        run: .\mvnw.cmd "-DexcludedGroups=ui-regression,api-regression" test
 
       - name: Build package
         run: .\mvnw.cmd -DskipTests package
