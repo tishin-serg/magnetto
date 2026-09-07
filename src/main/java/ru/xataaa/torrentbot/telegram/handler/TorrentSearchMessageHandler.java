@@ -51,7 +51,7 @@ public class TorrentSearchMessageHandler implements TelegramMessageHandler {
         if (query.length() < 2) {
             telegramMessageService.sendTextWithInlineKeyboard(
                     chatId,
-                    "Нажми \"Найти через TMDb\" и начни вводить название. Карточки появятся над клавиатурой.",
+                    "🔎 Поиск\n\nНапиши название фильма или сериала, например «Матрица 1999».",
                     telegramKeyboardFactory.searchLauncherKeyboard()
             );
             return;
@@ -84,20 +84,29 @@ public class TorrentSearchMessageHandler implements TelegramMessageHandler {
     }
 
     private void sendDirectTorrentSearch(Long chatId, String query, String queryHash, CompletableFuture<TorrentSearchService.SearchPage> searchFuture) {
+        var progress = telegramMessageService.sendText(chatId, "Ищу раздачи: " + query + "…");
+        Long progressId = progress == null ? null : progress.getMessageId();
         TorrentSearchService.SearchPage searchPage;
         try {
             searchPage = searchFuture.get();
         } catch (InterruptedException interruptedException) {
             Thread.currentThread().interrupt();
-            telegramMessageService.sendText(chatId, "Поиск временно недоступен. Попробуй ещё раз позже.");
+            renderSearch(chatId, progressId, "Поиск прерван. Попробуй ещё раз.", telegramKeyboardFactory.searchLauncherKeyboard());
             return;
         } catch (ExecutionException executionException) {
             Throwable cause = executionException.getCause() == null ? executionException : executionException.getCause();
             log.warn("Torrent search failed: chatId={}, queryHash={}, error={}", chatId, queryHash, cause.getMessage());
-            telegramMessageService.sendText(chatId, "Поиск временно недоступен. Внешний источник не ответил, попробуй ещё раз позже.");
+            renderSearch(chatId, progressId, "Источник раздач не ответил. Попробуй поиск позже.", telegramKeyboardFactory.searchLauncherKeyboard());
             return;
         }
-        sendSearchPage(chatId, searchPage);
+        renderSearch(chatId, progressId, torrentSearchService.formatPageMessage(searchPage)
+                        + (searchPage.results().isEmpty() ? "\n\nПопробуй другое название или добавь год выпуска." : ""),
+                searchPage.results().isEmpty() ? telegramKeyboardFactory.searchLauncherKeyboard() : torrentSearchService.resultsKeyboard(searchPage));
+    }
+
+    private void renderSearch(Long chatId, Long messageId, String text, String keyboard) {
+        if (messageId == null) telegramMessageService.sendTextWithInlineKeyboard(chatId, text, keyboard);
+        else telegramMessageService.editText(chatId, messageId, text, keyboard);
     }
 
     private void sendSearchPage(Long chatId, TorrentSearchService.SearchPage searchPage) {

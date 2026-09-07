@@ -117,7 +117,7 @@ class MovieDownloadConfirmationServiceTest {
         service.handle("q3", 42L, 100L, old);
         verifyNoInteractions(jobs);
         verify(preferences, never()).save(anyLong(), any());
-        service.handle("q4", 42L, 100L, callback("Подобрать раздачу"));
+        service.handle("q4", 42L, 100L, editedCallback("Подобрать раздачу"));
         verify(messages).editText(eq(42L), eq(100L), contains("Подходящих раздач нет"), anyString());
     }
 
@@ -138,5 +138,26 @@ class MovieDownloadConfirmationServiceTest {
         assertThatThrownBy(() -> p.with("min", "-1")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> p.with("max", "NaN")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> p.with("seeds", "1.5")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test void inputErrorAndSuccessEditSameMessageAndLeavingInputPreventsSave() throws Exception {
+        service.settings(42L);
+        service.handle("q", 42L, 100L, callback("Размер от"));
+        clearInvocations(messages);
+        service.consumeInput(42L, "не число");
+        verify(messages).editText(eq(42L), eq(100L), contains("Попробуй другое число"), contains("pref:edit:"));
+        service.consumeInput(42L, "5");
+        verify(messages).editText(eq(42L), eq(100L), contains("Изменения сохраняются сразу"), anyString());
+        verify(messages, never()).sendTextWithInlineKeyboard(anyLong(), anyString(), anyString());
+        service.handle("q2", 42L, 100L, editedCallback("Размер до"));
+        service.leaveInput(42L);
+        assertThat(service.consumeInput(42L, "12")).isFalse();
+        verify(preferences, times(1)).save(anyLong(), any());
+    }
+
+    @Test void expiredSessionAfterRestartOffersRecovery() {
+        service.handle("q", 42L, 100L, "pref:confirm:missing:0");
+        verify(messages).sendTextWithInlineKeyboard(eq(42L), contains("устарел"), contains("menu:settings"));
+        verifyNoInteractions(jobs);
     }
 }

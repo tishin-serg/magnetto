@@ -21,6 +21,6 @@ public class StartCommandHandler implements TelegramMessageHandler {
 
     @Override
     public void handle(Long chatId, String text) {
-        telegramMessageService.sendTextWithInlineKeyboard(chatId, menuCallbackHandler.mainMenuText(), telegramKeyboardFactory.mainMenuKeyboard());
+        telegramMessageService.sendTextWithInlineKeyboard(chatId, menuCallbackHandler.mainMenuText() + "\n/help — помощь", telegramKeyboardFactory.persistentKeyboard());
     }
 }

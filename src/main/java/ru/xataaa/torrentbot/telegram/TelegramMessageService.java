@@ -34,7 +34,15 @@ public class TelegramMessageService {
     }
 
     public TelegramMessageResponse editText(Long chatId, Long messageId, String text, String replyMarkupJson) {
-        return retryExecutor.execute("telegram.editMessageText", () -> telegramBotApiClient.editMessageText(chatId, messageId, text, replyMarkupJson));
+        try {
+            return retryExecutor.execute("telegram.editMessageText", () -> telegramBotApiClient.editMessageText(chatId, messageId, text, replyMarkupJson));
+        } catch (ru.xataaa.torrentbot.retry.NonRetryableOperationException exception) {
+            String reason = String.valueOf(exception.getMessage());
+            if (reason.contains("message to edit not found") || reason.contains("message can't be edited")) {
+                return sendTextWithInlineKeyboard(chatId, text, replyMarkupJson);
+            }
+            throw exception;
+        }
     }
 
     public void sendTyping(Long chatId) {
@@ -49,7 +57,13 @@ public class TelegramMessageService {
     }
 
     public void answerCallbackQuery(String callbackQueryId, String text) {
-        retryExecutor.executeVoid("telegram.answerCallbackQuery", () -> telegramBotApiClient.answerCallbackQuery(callbackQueryId, text));
+        if (callbackQueryId == null || callbackQueryId.isBlank()) return;
+        try {
+            retryExecutor.executeVoid("telegram.answerCallbackQuery", () -> telegramBotApiClient.answerCallbackQuery(callbackQueryId, text));
+        } catch (RuntimeException exception) {
+            // An expired spinner must not prevent rendering a fresh screen.
+            log.debug("Callback acknowledgement unavailable");
+        }
     }
 
     public void answerInlineQuery(String inlineQueryId, String resultsJson, int cacheTimeSeconds) {

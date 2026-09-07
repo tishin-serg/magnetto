@@ -44,20 +44,31 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
             this.owner = owner; this.movie = movie; this.preferences = preferences;
         }
     }
-    private record Input(String sessionId, String field, int revision, Instant expires) {}
+    private record Input(String sessionId, String field, int revision, Instant expires, Long messageId) {}
+
+    public void leaveInput(Long chatId) {
+        Input input = inputs.remove(chatId);
+        if (input == null) return;
+        Session session = sessions.get(input.sessionId);
+        if (session != null) synchronized (session) { session.revision++; }
+    }
 
     private boolean allowed(Long chatId) {
         return chatId != null && chatId > 0 && appProperties.isChatAllowed(chatId);
     }
 
     public void settings(Long chatId) {
+        settings(chatId, null);
+    }
+
+    public void settings(Long chatId, Long messageId) {
         if (!allowed(chatId)) {
             messages.sendText(chatId, "Открой настройки в личном чате с ботом.");
             return;
         }
         Session session = create(chatId, null);
         session.editing = true;
-        editor(session, null);
+        editor(session, messageId);
     }
 
     public void open(Long chatId, Long messageId, MovieMetadata movie) {
@@ -69,7 +80,7 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
             show(session, messageId);
         } catch (RuntimeException exception) {
             sessions.remove(session.id);
-            messages.sendText(chatId, "Источник раздач временно недоступен. Повтори выбор фильма позже.");
+            messages.sendTextWithInlineKeyboard(chatId, "Не удалось подобрать раздачу. Источник временно недоступен. Попробуй поиск позже.", new TelegramKeyboardFactory().searchLauncherKeyboard());
         }
     }
 
@@ -118,7 +129,10 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
         if (parts.length < 4) { messages.answerCallbackQuery(queryId, "Кнопка устарела"); return; }
         Session session = sessions.get(parts[2]);
         if (session == null || session.owner != chatId || session.expires.isBefore(Instant.now())) {
-            messages.answerCallbackQuery(queryId, "Экран устарел. Повтори выбор фильма или /settings."); return;
+            messages.answerCallbackQuery(queryId, "Экран устарел. Открой поиск или настройки заново.");
+            if (session == null || session.owner == chatId)
+                messages.sendTextWithInlineKeyboard(chatId, "Этот экран устарел. Сохранённые настройки не потеряны.", new TelegramKeyboardFactory().mainMenuKeyboard());
+            return;
         }
         synchronized (session) {
             if (session.closed || !Integer.toString(session.revision).equals(parts[3])) {
@@ -143,25 +157,31 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
             session.revision++;
             inputs.remove(chatId);
             if (action.equals("cancel")) {
-                session.closed = true; render(session, messageId, "Отменено. Загрузка не запускалась.", List.of()); return;
+                session.closed = true; render(session, messageId, session.movie == null
+                        ? "Настройки сохранены.\n\n" + session.preferences.summary()
+                        : "Заявка отменена. Загрузка не запускалась.", homeRows()); return;
             }
             if (action.equals("edit")) {
                 session.editing = true; editor(session, messageId); return;
             }
             if (action.equals("field") && parts.length == 5) {
                 if (!session.editing || !Set.of("min", "max", "seeds").contains(parts[4])) return;
-                inputs.put(chatId, new Input(session.id, parts[4], session.revision, Instant.now().plusSeconds(600)));
+                inputs.put(chatId, new Input(session.id, parts[4], session.revision, Instant.now().plusSeconds(600), messageId));
                 String prompt = parts[4].equals("seeds") ? "Введи минимальное число сидов (целое, от 1)."
                         : "Введи размер «" + (parts[4].equals("min") ? "от" : "до") + "» в ГБ, например 4,5.";
-                render(session, messageId, prompt, List.of(List.of(button(session, "Назад", "edit")))); return;
+                render(session, messageId, prompt + "\n\nСейчас: " + session.preferences.summary(), List.of(List.of(button(session, "← Назад", "edit")))); return;
             }
             if (action.equals("target") && parts.length == 5 && session.editing) {
+                if (parts[4].equals("S3") && !(s3.isEnabled() && s3.isConfigured())) {
+                    render(session, messageId, "Облако S3 недоступно. Выбери домашний ПК или сервер.",
+                            List.of(List.of(button(session, "← Настройки", "edit")))); return;
+                }
                 session.preferences = session.preferences.with("target", parts[4]);
                 saveDefaults(session); editor(session, messageId); return;
             }
             if (action.equals("back")) {
                 if (session.movie == null) {
-                    session.closed = true; render(session, messageId, "Настройки сохранены.\n\n" + session.preferences.summary(), List.of());
+                    session.closed = true; render(session, messageId, "✅ Настройки сохранены.\n\n" + session.preferences.summary(), homeRows());
                 } else {
                     refresh(session); session.editing = false; show(session, messageId);
                 }
@@ -184,8 +204,13 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
     public boolean consumeInput(Long chatId, String text) {
         Input input = inputs.get(chatId);
         if (input == null) return false;
-        if (text == null || text.startsWith("/") || input.expires.isBefore(Instant.now())) {
-            inputs.remove(chatId, input); return false;
+        if (text == null || text.trim().startsWith("/") || text.trim().startsWith("magnet:")) {
+            leaveInput(chatId); return false;
+        }
+        if (input.expires.isBefore(Instant.now())) {
+            inputs.remove(chatId, input);
+            messages.sendTextWithInlineKeyboard(chatId, "Время ввода истекло. Открой настройки и выбери параметр заново.", new TelegramKeyboardFactory().mainMenuKeyboard());
+            return true;
         }
         Session session = sessions.get(input.sessionId);
         if (!allowed(chatId) || session == null || session.expires.isBefore(Instant.now())) {
@@ -198,12 +223,13 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
             try {
                 session.preferences = session.preferences.with(input.field, text);
             } catch (IllegalArgumentException exception) {
-                messages.sendText(chatId, exception.getMessage()); return true;
+                render(session, input.messageId, exception.getMessage() + "\n\nПопробуй другое число или вернись к настройкам.",
+                        List.of(List.of(button(session, "← Назад", "edit")))); return true;
             }
             saveDefaults(session);
             inputs.remove(chatId, input);
             session.revision++;
-            editor(session, null);
+            editor(session, input.messageId);
             return true;
         }
     }
@@ -214,13 +240,15 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
 
     private void editor(Session session, Long messageId) {
         String text = (session.movie == null ? "⚙️ Настройки следующих загрузок" : "⚙️ Условия только этой заявки")
-                + "\n\n" + session.preferences.summary() + "\n\nГраницы включены. 1 ГБ = 1 000 000 000 байт.";
+                + "\n\n" + session.preferences.summary() + (session.movie == null ? "\n\nИзменения сохраняются сразу." : "\n\nНастройки следующих загрузок не изменятся.");
         render(session, messageId, text, List.of(
                 List.of(button(session, "Размер от", "field:min"), button(session, "Размер до", "field:max")),
                 List.of(button(session, "Минимум сидов", "field:seeds")),
-                List.of(button(session, "Домашний ПК", "target:HOME_PC"), button(session, "S3", "target:S3"), button(session, "VPS", "target:VPS")),
+                List.of(button(session, "Домашний ПК", "target:HOME_PC"), button(session, "VPS", "target:VPS")),
+                List.of(button(session, "Облако · S3", "target:S3")),
                 List.of(button(session, session.movie == null ? "Готово" : "Подобрать раздачу", "back")),
-                List.of(button(session, "Отмена", "cancel"))));
+                List.of(session.movie == null ? Map.of("text", "🏠 Главное меню", "callback_data", "menu:home")
+                        : button(session, "❌ Отменить заявку", "cancel"))));
     }
 
     private void show(Session session, Long messageId) {
@@ -249,6 +277,11 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
         String[] parts = action.split(":", 2);
         return Map.of("text", label, "callback_data", "pref:" + parts[0] + ":" + session.id + ":" + session.revision
                 + (parts.length == 2 ? ":" + parts[1] : ""));
+    }
+
+    private List<List<Map<String, String>>> homeRows() {
+        return List.of(List.of(Map.of("text", "🔎 Поиск", "callback_data", "menu:search")),
+                List.of(Map.of("text", "🏠 Главное меню", "callback_data", "menu:home")));
     }
 
     private void render(Session session, Long messageId, String text, List<List<Map<String, String>>> rows) {

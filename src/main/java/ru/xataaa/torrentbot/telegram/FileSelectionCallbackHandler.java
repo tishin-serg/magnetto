@@ -28,6 +28,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
     private static final String DONE_PREFIX = "file:select:done:";
     private static final String PAGE_PREFIX = "file:select:page:";
     private static final String TOGGLE_PREFIX = "file:toggle:";
+    private static final String SET_PREFIX = "file:set:";
     private static final String LEGACY_ONE_PREFIX = "file:select:";
 
     private final DownloadFileRepository downloadFileRepository;
@@ -45,13 +46,28 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
     }
 
     @Override
-    public void handle(String callbackQueryId, Long chatId, Long messageId, String data) {
+    public synchronized void handle(String callbackQueryId, Long chatId, Long messageId, String data) {
+        DownloadJob ownerJob = selectionJob(data);
+        if (ownerJob == null || !java.util.Objects.equals(ownerJob.getChatId(), chatId)
+                || ownerJob.getStatus() != DownloadJobStatus.WAITING_FILE_SELECTION) {
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Выбор файлов уже завершён или устарел. Открой загрузки.");
+            return;
+        }
         if (data.startsWith(PAGE_PREFIX)) {
             handlePage(callbackQueryId, chatId, messageId, data);
             return;
         }
         if (data.startsWith(TOGGLE_PREFIX)) {
-            handleToggle(callbackQueryId, chatId, messageId, data.substring(TOGGLE_PREFIX.length()));
+            handleToggle(callbackQueryId, chatId, messageId, data.substring(TOGGLE_PREFIX.length()), null);
+            return;
+        }
+        if (data.startsWith(SET_PREFIX)) {
+            String payload = data.substring(SET_PREFIX.length());
+            String[] fields = payload.split(":");
+            if (fields.length != 3 || !(fields[2].equals("0") || fields[2].equals("1"))) {
+                telegramMessageService.answerCallbackQuery(callbackQueryId, "Открой выбор файлов заново"); return;
+            }
+            handleToggle(callbackQueryId, chatId, messageId, fields[0] + ":" + fields[1], fields[2].equals("1"));
             return;
         }
         if (data.startsWith(DONE_PREFIX)) {
@@ -67,6 +83,19 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         }
     }
 
+    private DownloadJob selectionJob(String data) {
+        try {
+            if (data.startsWith(TOGGLE_PREFIX) || data.startsWith(SET_PREFIX) || (data.startsWith(LEGACY_ONE_PREFIX)
+                    && !data.startsWith(ALL_PREFIX) && !data.startsWith(DONE_PREFIX) && !data.startsWith(PAGE_PREFIX))) {
+                String value = data.substring(data.startsWith(SET_PREFIX) ? SET_PREFIX.length() : data.startsWith(TOGGLE_PREFIX) ? TOGGLE_PREFIX.length() : LEGACY_ONE_PREFIX.length()).split(":")[0];
+                DownloadFile file = downloadFileRepository.findById(UUID.fromString(value)).orElse(null);
+                return file == null ? null : downloadJobRepository.findById(file.getJobId()).orElse(null);
+            }
+            String prefix = data.startsWith(ALL_PREFIX) ? ALL_PREFIX : data.startsWith(DONE_PREFIX) ? DONE_PREFIX : PAGE_PREFIX;
+            return findJob(data.substring(prefix.length()).split(":")[0]);
+        } catch (IllegalArgumentException | IndexOutOfBoundsException exception) { return null; }
+    }
+
     private void handleAll(String callbackQueryId, Long chatId, Long messageId, String jobIdValue) {
         DownloadJob downloadJob = findJob(jobIdValue);
         if (downloadJob == null || downloadJob.getTorrentHash() == null) {
@@ -77,7 +106,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         for (DownloadFile file : files) {
             downloadFileRepository.updateStatus(file.getId(), DownloadFileStatus.READY_TO_UPLOAD);
         }
-        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectionFiles(downloadJob.getId())))) {
+        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectionFiles(downloadJob.getId())), downloadJob.getId())) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
             return;
         }
@@ -97,7 +126,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Выбери хотя бы один файл");
             return;
         }
-        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectedFiles))) {
+        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectedFiles), downloadJob.getId())) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
             return;
         }
@@ -111,7 +140,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         );
     }
 
-    private void handleToggle(String callbackQueryId, Long chatId, Long messageId, String payload) {
+    private void handleToggle(String callbackQueryId, Long chatId, Long messageId, String payload, Boolean selected) {
         String[] parts = payload.split(":");
         if (parts.length != 2) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Не понял выбор");
@@ -124,9 +153,8 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Файл не найден");
             return;
         }
-        DownloadFileStatus nextStatus = selectedFile.getStatus() == DownloadFileStatus.READY_TO_UPLOAD
-                ? DownloadFileStatus.SKIPPED_BY_USER
-                : DownloadFileStatus.READY_TO_UPLOAD;
+        boolean select = selected == null ? selectedFile.getStatus() != DownloadFileStatus.READY_TO_UPLOAD : selected;
+        DownloadFileStatus nextStatus = select ? DownloadFileStatus.READY_TO_UPLOAD : DownloadFileStatus.SKIPPED_BY_USER;
         downloadFileRepository.updateStatus(selectedFile.getId(), nextStatus);
         List<DownloadFile> files = selectionFiles(selectedFile.getJobId());
         telegramMessageService.answerCallbackQuery(callbackQueryId, nextStatus == DownloadFileStatus.READY_TO_UPLOAD ? "Файл выбран" : "Файл исключён");
@@ -181,7 +209,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
                     : DownloadFileStatus.SKIPPED_BY_USER;
             downloadFileRepository.updateStatus(file.getId(), status);
         }
-        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, selectedFile.getSizeBytes())) {
+        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, selectedFile.getSizeBytes(), downloadJob.getId())) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
             return;
         }
@@ -289,7 +317,7 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         return text.toString();
     }
 
-    private boolean hasEnoughSpace(Long chatId, Long messageId, long requiredBytes) {
+    private boolean hasEnoughSpace(Long chatId, Long messageId, long requiredBytes, UUID jobId) {
         if (diskSpaceService.hasEnoughSpace(requiredBytes)) {
             return true;
         }
@@ -298,7 +326,8 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
                 + "Нужно примерно: " + fileSizeFormatter.format(requiredBytes) + "\n"
                 + "Свободно: " + fileSizeFormatter.format(diskSpaceInfo.usableBytes()) + "\n\n"
                 + "Выбери меньше файлов или очисти медиатеку.";
-        telegramMessageService.editText(chatId, messageId, text, null);
+        telegramMessageService.editText(chatId, messageId, text,
+                fileSelectionViewFactory.keyboard(selectionFiles(jobId), jobId, 0));
         return false;
     }
 

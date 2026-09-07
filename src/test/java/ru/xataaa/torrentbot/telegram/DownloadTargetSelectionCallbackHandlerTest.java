@@ -34,7 +34,7 @@ class DownloadTargetSelectionCallbackHandlerTest {
         handler.handle("callback-1", 42L, 100L, "target:select:" + selectionId + ":S3");
 
         verify(telegramMessageService).answerCallbackQuery("callback-1", "S3 не настроен");
-        verify(telegramMessageService).editText(eq(42L), eq(100L), contains("S3 сейчас выключен или не настроен"), any());
+        verify(telegramMessageService).editText(eq(42L), eq(100L), contains("Облако S3 недоступно"), contains(":HOME_PC"));
         verify(downloadJobService, never()).startDownload(any(), any(), anyLong(), any(), any());
     }
 }

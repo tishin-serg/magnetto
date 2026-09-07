@@ -21,6 +21,8 @@ public class TelegramPollingService {
     private final Executor telegramWorkExecutor;
     @org.springframework.beans.factory.annotation.Autowired
     private MovieSelectionCallbackHandler movieSelections;
+    @org.springframework.beans.factory.annotation.Autowired
+    private TelegramMessageService messages;
 
     public TelegramPollingService(
             TelegramBotApiClient telegramBotApiClient,
@@ -121,6 +123,16 @@ public class TelegramPollingService {
             } catch (RuntimeException runtimeException) {
                 log.warn("Telegram update processing failed: updateId={}, error={}",
                         telegramUpdate.getUpdateId(), runtimeException.getMessage());
+                if (messages != null && telegramUpdate.getMessage() != null && telegramUpdate.getMessage().getChat() != null) {
+                    try {
+                        messages.sendTextWithInlineKeyboard(telegramUpdate.getMessage().getChat().getId(),
+                                "Не удалось обработать сообщение. Открой нужный раздел заново. Если запускалась загрузка, сначала проверь её состояние.",
+                                new TelegramKeyboardFactory().mainMenuKeyboard());
+                    } catch (RuntimeException deliveryFailure) {
+                        // A blocked bot or unavailable Telegram cannot receive recovery messages; /start restores the UI.
+                        log.debug("Recovery message could not be delivered");
+                    }
+                }
             }
         });
     }

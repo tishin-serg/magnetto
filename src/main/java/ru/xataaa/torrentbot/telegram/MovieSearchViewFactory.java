@@ -28,16 +28,13 @@ public class MovieSearchViewFactory {
                     .append(String.format(java.util.Locale.US, "%.1f", movie.rating()))
                     .append("\n");
         }
-        text.append("\nДальше выбери сезон и серии, затем озвучку и качество.\n")
-                .append("После этого я покажу подходящие раздачи.\n\n")
-                .append("Выбрано сейчас:\n")
+        text.append("\nВыбрано:\n")
                 .append("Качество: ").append(session.quality().displayName()).append("\n")
                 .append("Озвучка: ").append(session.voice().displayName()).append("\n");
         if (movie.isTv()) {
             text.append("Сезон: ").append(session.seasonNumber() == null ? "не выбран" : session.seasonNumber()).append("\n")
                     .append("Серии: ").append(episodesLabel(session.episodeNumbers())).append("\n");
         }
-        text.append("\nНажми \"Найти раздачи\", когда выбор готов.");
         return text.toString();
     }
 
@@ -96,7 +93,7 @@ public class MovieSearchViewFactory {
                     .append("\"}]");
             index++;
         }
-        keyboard.append(",[{\"text\":\"Назад к фильтрам\",\"callback_data\":\"movie:filters:")
+        keyboard.append(",[{\"text\":\"← Фильтры\",\"callback_data\":\"movie:filters:")
                 .append(escapeJson(session.sessionId()))
                 .append("\"}]]}");
         return keyboard.toString();
@@ -123,7 +120,7 @@ public class MovieSearchViewFactory {
                     .append("\"}]");
             index++;
         }
-        keyboard.append(",[{\"text\":\"Назад к фильтрам\",\"callback_data\":\"movie:filters:")
+        keyboard.append(",[{\"text\":\"← Фильтры\",\"callback_data\":\"movie:filters:")
                 .append(escapeJson(session.sessionId()))
                 .append("\"}]]}");
         return keyboard.toString();
@@ -154,7 +151,7 @@ public class MovieSearchViewFactory {
                     .append("\"}]");
             index++;
         }
-        keyboard.append(",[{\"text\":\"Назад к фильтрам\",\"callback_data\":\"movie:filters:")
+        keyboard.append(",[{\"text\":\"← Фильтры\",\"callback_data\":\"movie:filters:")
                 .append(escapeJson(session.sessionId()))
                 .append("\"}]]}");
         return keyboard.toString();
@@ -188,7 +185,7 @@ public class MovieSearchViewFactory {
                     .append(episode.episodeNumber())
                     .append("\"}");
             column++;
-            if (column == 5) {
+            if (column == 2) {
                 keyboard.append("]");
                 column = 0;
             }
@@ -199,7 +196,7 @@ public class MovieSearchViewFactory {
         keyboard.append(",[{\"text\":\"Продолжить\",\"callback_data\":\"movie:filters:")
                 .append(escapeJson(session.sessionId()))
                 .append("\"}]");
-        keyboard.append(",[{\"text\":\"Назад к фильтрам\",\"callback_data\":\"movie:filters:")
+        keyboard.append(",[{\"text\":\"← Фильтры\",\"callback_data\":\"movie:filters:")
                 .append(escapeJson(session.sessionId()))
                 .append("\"}]]}");
         return keyboard.toString();
@@ -209,7 +206,7 @@ public class MovieSearchViewFactory {
         return "{\"inline_keyboard\":["
                 + "[{\"text\":\"Сбросить качество\",\"callback_data\":\"movie:quality:" + escapeJson(session.sessionId()) + ":any\"}],"
                 + "[{\"text\":\"Сбросить озвучку\",\"callback_data\":\"movie:voice:" + escapeJson(session.sessionId()) + ":any\"}],"
-                + "[{\"text\":\"Назад к фильтрам\",\"callback_data\":\"movie:filters:" + escapeJson(session.sessionId()) + "\"}],"
+                + "[{\"text\":\"← Фильтры\",\"callback_data\":\"movie:filters:" + escapeJson(session.sessionId()) + "\"}],"
                 + "[{\"text\":\"Новый поиск\",\"callback_data\":\"menu:search\"}]]}";
     }
 
@@ -301,7 +298,7 @@ public class MovieSearchViewFactory {
                     .append("\"}]");
             index++;
         }
-        keyboard.append(",[{\"text\":\"Назад к сезонам\",\"callback_data\":\"movie:season:")
+        keyboard.append(",[{\"text\":\"← Сезоны\",\"callback_data\":\"movie:season:")
                 .append(escapeJson(session.sessionId()))
                 .append(":menu\"}],");
         keyboard.append("[{\"text\":\"Новый поиск\",\"callback_data\":\"menu:search\"}]]}");

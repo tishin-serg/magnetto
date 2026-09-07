@@ -40,6 +40,8 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
 
     @org.springframework.beans.factory.annotation.Autowired
     private MovieDownloadConfirmationService confirmations;
+    @org.springframework.beans.factory.annotation.Autowired
+    private MediaCleanupCallbackHandler cleanup;
     @Override
     public boolean supports(String data) {
         return data != null && data.startsWith("menu:");
@@ -47,8 +49,18 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
 
     @Override
     public void handle(String callbackQueryId, Long chatId, Long messageId, String data) {
-        telegramMessageService.answerCallbackQuery(callbackQueryId, "Готово");
-        if ("menu:settings".equals(data)) { confirmations.settings(chatId); return; }
+        telegramMessageService.answerCallbackQuery(callbackQueryId, "");
+        if (cleanup != null) cleanup.cancelPending(chatId);
+        if (confirmations != null) confirmations.leaveInput(chatId);
+        if ("menu:settings".equals(data)) { confirmations.settings(chatId, messageId); return; }
+        if ("menu:libraries".equals(data)) {
+            editOrSend(chatId, messageId, "🎬 Медиатека\n\nГде находятся скачанные фильмы?", telegramKeyboardFactory.libraryMenuKeyboard());
+            return;
+        }
+        if ("menu:help".equals(data)) {
+            editOrSend(chatId, messageId, helpText(), telegramKeyboardFactory.helpKeyboard());
+            return;
+        }
         if ("menu:search".equals(data)) {
             log.info("search_opened: chatId={}", chatId);
             editOrSend(chatId, messageId, searchHelpText(), telegramKeyboardFactory.searchLauncherKeyboard());
@@ -59,7 +71,7 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
             return;
         }
         if ("menu:space".equals(data)) {
-            editOrSend(chatId, messageId, diskSpaceText(), telegramKeyboardFactory.backToMenuKeyboard());
+            editOrSend(chatId, messageId, diskSpaceText(), telegramKeyboardFactory.libraryRecoveryKeyboard("menu:space"));
             return;
         }
         if ("menu:tasks".equals(data)) {
@@ -80,7 +92,7 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
         }
         if ("menu:library:vps".equals(data)) {
             String keyboard = mediaLibraryService.publicWebdavUrl() == null || mediaLibraryService.publicWebdavUrl().isBlank()
-                    ? telegramKeyboardFactory.backToMenuKeyboard()
+                    ? telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:vps")
                     : telegramKeyboardFactory.vpsLibraryKeyboard(mediaLibraryService.publicWebdavUrl());
             editOrSend(chatId, messageId, vpsMediaLibraryText(), keyboard);
             return;
@@ -90,16 +102,26 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
 
     public String mainMenuText() {
         return """
-                Что можно сделать сейчас:
+                🎬 Magnetto
 
-                • Написать название фильма или сериала, и я найду подходящие раздачи.
-                • Отправить magnet-ссылку.
-                • Посмотреть все задачи, поставить отдельную на паузу или продолжить.
-                • Открыть домашнюю или VPS медиатеку.
-                • Открыть S3 медиатеку.
-                • Создать временную ссылку для скачивания на iPhone.
-                • Проверить свободное место.
-                • Очистить медиатеку.
+                Найду и скачаю фильмы и сериалы. Готовые файлы — в медиатеке.
+
+                Отправь название или выбери «🔎 Поиск» для подсказок.
+                """;
+    }
+
+    public String helpText() {
+        return """
+                Помощь
+
+                Поиск — название фильма или сериала, например «Матрица 1999». Можно отправить magnet-ссылку.
+                Загрузки — ход скачивания, пауза и продолжение.
+                Медиатека — готовые файлы и ссылки для просмотра.
+                Настройки — размер, доступность раздач и место скачивания.
+
+                /start — главное меню · /cancel — выйти из ввода
+                /search название — поиск раздач · /tasks — загрузки
+                /library — медиатека · /settings — настройки
                 """;
     }
 
@@ -137,14 +159,28 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
         StringBuilder text = new StringBuilder();
         appendVpsLibrary(text);
         if (text.isEmpty()) {
-            return "VPS медиатека сейчас пустая.";
+            return "Медиатека · VPS\n\nФильмов пока нет. Найди фильм и выбери скачивание на VPS.";
         }
         return text.toString().trim();
     }
 
     private void handleHomeLibrary(Long chatId, Long messageId, String data) {
         int page = homeLibraryPage(data);
-        List<HomeMediaLibraryItem> homeItems = homeItemsForKeyboard();
+        List<HomeMediaLibraryItem> homeItems;
+        try {
+            homeItems = homeWebdavMediaLibraryService.isEnabled() ? homeWebdavMediaLibraryService.listItems() : List.of();
+        } catch (RuntimeException exception) {
+            editOrSend(chatId, messageId, "Домашний ПК недоступен.\n\nПроверь, что он включён и подключён к сети, затем обнови список.",
+                    telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:home"));
+            return;
+        }
+        if (homeItems.isEmpty()) {
+            editOrSend(chatId, messageId, homeWebdavMediaLibraryService.isEnabled()
+                    ? "Домашняя медиатека\n\nФильмов пока нет. Найди фильм и выбери скачивание на домашний ПК."
+                    : "Домашняя медиатека не подключена. Выбери другое хранилище.",
+                    telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:home"));
+            return;
+        }
         editOrSend(
                 chatId,
                 messageId,
@@ -164,7 +200,14 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
     private void handleHomeFolder(Long chatId, Long messageId, String data) {
         String folderKey = homeFolderKey(data);
         int page = homeFolderPage(data);
-        List<HomeMediaLibraryFile> folderFiles = homeFilesInFolder(folderKey);
+        List<HomeMediaLibraryFile> folderFiles;
+        try {
+            folderFiles = homeWebdavMediaLibraryService.listFilesInFolder(folderKey);
+        } catch (RuntimeException exception) {
+            editOrSend(chatId, messageId, "Не удалось открыть папку. Проверь подключение домашнего ПК и обнови медиатеку.",
+                    telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:home"));
+            return;
+        }
         editOrSend(
                 chatId,
                 messageId,
@@ -181,7 +224,21 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
 
     private void handleS3Library(Long chatId, Long messageId, String data) {
         int page = s3LibraryPage(data);
-        List<S3MediaLibraryFile> files = s3FilesForKeyboard();
+        List<S3MediaLibraryFile> files;
+        try {
+            files = s3MediaLibraryService.isEnabled() ? s3MediaLibraryService.listFiles() : List.of();
+        } catch (RuntimeException exception) {
+            editOrSend(chatId, messageId, "Облако S3 временно недоступно. Попробуй обновить список позже.",
+                    telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:s3"));
+            return;
+        }
+        if (files.isEmpty()) {
+            editOrSend(chatId, messageId, s3MediaLibraryService.isEnabled()
+                    ? "Облако · S3\n\nФильмов пока нет. Найди фильм и выбери скачивание в S3."
+                    : "Облако S3 не подключено. Выбери другое хранилище.",
+                    telegramKeyboardFactory.libraryRecoveryKeyboard("menu:library:s3"));
+            return;
+        }
         editOrSend(
                 chatId,
                 messageId,
@@ -212,25 +269,10 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
 
     private String searchHelpText() {
         return """
-                Как искать:
+                🔎 Поиск
 
-                Лучший способ - выбрать карточку из TMDb. Так я точнее пойму фильм, сериал, год и сезоны.
-
-                Просто напиши название фильма или сериала.
-
-                Примеры:
-                матрица 1999
-                the matrix 1999
-                во все тяжкие сериал
-                интерстеллар 1080p
-
-                Как я выбираю результаты:
-                1. Сначала ищу по названию и году.
-                2. Если результатов мало, повторяю общий поиск.
-                3. Выше ставлю раздачи с magnet-ссылкой, большим числом сидов и нормальным качеством.
-                4. Экранки вроде CAMRip/TS скрываю, если есть нормальные варианты.
-
-                В выдаче можно листать страницы и выбрать конкретную раздачу кнопкой.
+                Напиши название фильма или сериала, например «Матрица 1999».
+                Поиск с подсказками поможет выбрать точный фильм по названию и году.
                 """;
     }
 

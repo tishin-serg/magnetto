@@ -62,6 +62,7 @@ public class DownloadOrchestrator {
     private final FileSelectionViewFactory fileSelectionViewFactory;
     private final TimeProvider timeProvider;
     private final AppProperties appProperties;
+    private final DownloadTelemetry downloadTelemetry;
     private final ConcurrentMap<UUID, Boolean> runningJobs = new ConcurrentHashMap<>();
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -168,6 +169,11 @@ public class DownloadOrchestrator {
         }
         if (sizeGuard != null && !sizeGuard.check(downloadJob, info.getHash(), info.getTotalSize())) return;
         fileDiscoveryService.discoverFiles(downloadTarget(downloadJob), downloadJob.getId(), info.getHash());
+        if (downloadFileRepository.findByJobIdAndStatuses(downloadJob.getId(), List.of(DownloadFileStatus.READY_TO_UPLOAD)).isEmpty()) {
+            qbittorrentTorrentService.pauseTorrent(downloadTarget(downloadJob), info.getHash());
+            throw new NonRetryableOperationException(ErrorCode.UNSUPPORTED_FILE_TYPE,
+                    "В раздаче нет поддерживаемых видеофайлов. Загрузка остановлена; файлы не удалены. Выбери другую раздачу через «Поиск».");
+        }
         if (shouldAskFileSelection(downloadJob.getId())) {
             pauseTorrentForFileSelection(downloadJob, info.getHash());
             sendFileSelection(downloadJob);
@@ -365,11 +371,13 @@ public class DownloadOrchestrator {
         if (downloadJob.getTorrentHash() != null && !downloadJob.getTorrentHash().isBlank()) {
             Optional<QbittorrentTorrentInfo> byHash = qbittorrentTorrentService.getTorrentInfoByHash(downloadTarget, downloadJob.getTorrentHash());
             if (byHash.isPresent()) {
+                downloadTelemetry.record(downloadJob.getId(), byHash.get());
                 return byHash;
             }
         }
         Optional<QbittorrentTorrentInfo> byTag = qbittorrentTorrentService.getTorrentInfoByJobTag(downloadTarget, downloadJob.getId());
         byTag.ifPresent(info -> {
+            downloadTelemetry.record(downloadJob.getId(), info);
             downloadJobRepository.updateTorrentIdentity(downloadJob.getId(), info.getHash(), info.getName());
             log.info("Recovered torrent hash after restart: jobId={}, torrentHash={}, torrentName={}, downloadTarget={}", downloadJob.getId(), info.getHash(), info.getName(), downloadTarget);
         });
@@ -387,9 +395,9 @@ public class DownloadOrchestrator {
     }
 
     private void maybeSendProgress(DownloadJob downloadJob, QbittorrentTorrentInfo info, int progressPercent) {
-        int reportedStep = (progressPercent / 10) * 10;
+        int reportedStep = progressPercent;
         boolean firstProgressReport = downloadJob.getLastReportedProgressPercent() < 0;
-        boolean nextProgressStep = reportedStep >= downloadJob.getLastReportedProgressPercent() + 10;
+        boolean nextProgressStep = reportedStep != downloadJob.getLastReportedProgressPercent();
         if (!firstProgressReport && !nextProgressStep) {
             return;
         }
@@ -514,7 +522,7 @@ public class DownloadOrchestrator {
         downloadJobRepository.markFailed(downloadJob.getId(), errorCode, errorMessage, timeProvider.now());
         log.error("Job failed finally: jobId={}, chatId={}, status={}, errorCode={}, message={}",
                 downloadJob.getId(), downloadJob.getChatId(), downloadJob.getStatus(), errorCode, errorMessage);
-        if (errorCode == ErrorCode.INSUFFICIENT_DISK_SPACE) {
+        if (errorCode == ErrorCode.INSUFFICIENT_DISK_SPACE || errorCode == ErrorCode.UNSUPPORTED_FILE_TYPE) {
             telegramMessageService.sendText(downloadJob.getChatId(), errorMessage);
             startNextQueuedJob();
             return;

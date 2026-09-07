@@ -15,28 +15,26 @@ public class DownloadTargetSelectionService {
     public void askTarget(Long chatId, String magnetUrl, long expectedSizeBytes, String title) {
         String selectionId = downloadTargetSelectionCache.put(chatId, magnetUrl, expectedSizeBytes, title);
         StringBuilder text = new StringBuilder();
-        text.append("Куда скачать torrent?\n\n");
+        text.append("Куда скачать?\n\n");
         if (title != null && !title.isBlank()) {
             text.append("Раздача: ").append(title).append("\n");
         }
         if (expectedSizeBytes > 0) {
             text.append("Размер: ").append(fileSizeFormatter.format(expectedSizeBytes)).append("\n");
         }
-        text.append("\nЕсли внутри torrent несколько видеофайлов, я сначала загружу metadata и покажу выбор файлов/серий. ");
-        text.append("Скачивание продолжится только после подтверждения выбранных файлов.\n\n");
-        text.append("VPS скачивает на сервер как раньше.\n");
-        text.append("Домашний ПК скачивает в qBittorrent на твоём компьютере через Tailscale.\n");
-        text.append("S3: сначала скачаю на VPS, потом выгружу в S3 и дам ссылку.");
+        text.append("\nВыбор места запускает загрузку. Для раздачи с несколькими видео сначала предложу выбрать файлы.\n\n");
+        text.append("Домашний ПК должен быть включён. Для S3 сначала скачаю на сервер VPS, затем перенесу в облако.");
         telegramMessageService.sendTextWithInlineKeyboard(chatId, text.toString(), keyboard(selectionId));
     }
 
-    private String keyboard(String selectionId) {
+    static String keyboard(String selectionId) {
         return """
                 {"inline_keyboard":[
                   [{"text":"💾 Скачать на VPS","callback_data":"target:select:%s:VPS"}],
                   [{"text":"🏠 Скачать на домашний ПК","callback_data":"target:select:%s:HOME_PC"}],
-                  [{"text":"☁️ Скачать в S3","callback_data":"target:select:%s:S3"}]
+                  [{"text":"☁️ Скачать в S3","callback_data":"target:select:%s:S3"}],
+                  [{"text":"❌ Отмена","callback_data":"target:select:%s:CANCEL"}]
                 ]}
-                """.formatted(selectionId, selectionId, selectionId);
+                """.formatted(selectionId, selectionId, selectionId, selectionId);
     }
 }

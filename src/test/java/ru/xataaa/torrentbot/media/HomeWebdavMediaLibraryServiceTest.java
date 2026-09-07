@@ -11,6 +11,23 @@ import ru.xataaa.torrentbot.config.HomeWebdavProperties;
 @ApiRegression
 class HomeWebdavMediaLibraryServiceTest {
 
+    @Test void shouldRequestEncodedDirectoryWithoutDoubleEncoding() {
+        var requested = new java.util.ArrayList<String>();
+        var builder = WebClient.builder().exchangeFunction(request -> {
+            requested.add(request.url().getRawPath());
+            String body = request.url().getRawPath().equals("/")
+                    ? "<d:multistatus xmlns:d='DAV:'><d:response><d:href>/Top%20Gear%20&amp;%20%D0%A4/</d:href></d:response></d:multistatus>"
+                    : "<d:multistatus xmlns:d='DAV:'/>";
+            return reactor.core.publisher.Mono.just(org.springframework.web.reactive.function.client.ClientResponse
+                    .create(org.springframework.http.HttpStatus.MULTI_STATUS).body(body).build());
+        });
+        var template = service();
+        org.springframework.test.util.ReflectionTestUtils.setField(template, "webClientBuilder", builder);
+        template.listFiles();
+        assertThat(requested).contains("/Top%20Gear%20%26%20%D0%A4/");
+        assertThat(requested).noneMatch(path -> path.contains("%25"));
+    }
+
     @Test
     void shouldParseWebdavFilesAndBuildUrls() {
         HomeWebdavMediaLibraryService service = service();

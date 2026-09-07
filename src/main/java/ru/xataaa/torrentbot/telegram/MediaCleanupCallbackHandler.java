@@ -15,6 +15,13 @@ import ru.xataaa.torrentbot.media.S3MediaLibraryService;
 @RequiredArgsConstructor
 public class MediaCleanupCallbackHandler implements TelegramCallbackHandler {
 
+    private record Confirmation(Long chatId, Long messageId, String target, java.time.Instant expires) {}
+    private final java.util.Map<String, Confirmation> confirmations = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public void cancelPending(Long chatId) {
+        confirmations.entrySet().removeIf(e -> e.getValue().chatId().equals(chatId));
+    }
+
     private final AppProperties appProperties;
     private final MediaLibraryService mediaLibraryService;
     private final HomeWebdavCleanupService homeWebdavCleanupService;
@@ -40,21 +47,50 @@ public class MediaCleanupCallbackHandler implements TelegramCallbackHandler {
             editOrSend(
                     chatId,
                     messageId,
-                    "Что очистить?\n\nVPS — локальная WebDAV-медиатека на сервере.\nДомашняя медиатека — WebDAV-папка на домашнем ПК.\nS3 — только объекты внутри настроенного prefix.",
+                    cleanupAskText(),
                     telegramKeyboardFactory.cleanupConfirmKeyboard()
             );
             return;
         }
-        if ("media:cleanup:confirm".equals(data) || "media:cleanup:confirm:local".equals(data)) {
-            cleanupLocal(chatId, messageId, callbackQueryId);
+        if (data.startsWith("media:cleanup:confirm")) {
+            String target = switch (data) {
+                case "media:cleanup:confirm", "media:cleanup:confirm:local" -> "local";
+                case "media:cleanup:confirm:home" -> "home";
+                case "media:cleanup:confirm:s3" -> "s3";
+                default -> null;
+            };
+            if (target == null) { telegramMessageService.answerCallbackQuery(callbackQueryId, "Открой очистку заново"); return; }
+            confirmations.entrySet().removeIf(e -> e.getValue().expires().isBefore(java.time.Instant.now())
+                    || e.getValue().chatId().equals(chatId));
+            String token = java.util.UUID.randomUUID().toString().replace("-", "");
+            confirmations.put(token, new Confirmation(chatId, messageId, target, java.time.Instant.now().plusSeconds(120)));
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "");
+            String name = switch (target) { case "home" -> "домашнем ПК"; case "s3" -> "облаке S3"; default -> "сервере VPS"; };
+            editOrSend(chatId, messageId, "Удалить все файлы медиатеки на " + name + "?\n\nЭто нельзя отменить. Для удаления одного фильма открой его в медиатеке.",
+                    "{\"inline_keyboard\":[[{\"text\":\"🗑 Удалить все файлы\",\"callback_data\":\"media:cleanup:execute:" + token
+                            + "\"}],[{\"text\":\"❌ Отмена\",\"callback_data\":\"media:cleanup:cancel:" + token + "\"}]]}");
             return;
         }
-        if ("media:cleanup:confirm:home".equals(data)) {
-            cleanupHome(chatId, messageId, callbackQueryId);
-            return;
-        }
-        if ("media:cleanup:confirm:s3".equals(data)) {
-            cleanupS3(chatId, messageId, callbackQueryId);
+        if (data.startsWith("media:cleanup:cancel:") || data.startsWith("media:cleanup:execute:")) {
+            String token = data.substring(data.lastIndexOf(':') + 1);
+            Confirmation confirmation = confirmations.get(token);
+            if (confirmation == null || !confirmation.chatId().equals(chatId)
+                    || !java.util.Objects.equals(confirmation.messageId(), messageId)
+                    || confirmation.expires().isBefore(java.time.Instant.now())
+                    || !confirmations.remove(token, confirmation)) {
+                telegramMessageService.answerCallbackQuery(callbackQueryId, "Подтверждение устарело. Открой очистку заново.");
+                return;
+            }
+            if (data.startsWith("media:cleanup:cancel:")) {
+                telegramMessageService.answerCallbackQuery(callbackQueryId, "Удаление отменено");
+                editOrSend(chatId, messageId, "Удаление отменено. Файлы сохранены.", telegramKeyboardFactory.libraryMenuKeyboard());
+                return;
+            }
+            switch (confirmation.target()) {
+                case "home" -> cleanupHome(chatId, messageId, callbackQueryId);
+                case "s3" -> cleanupS3(chatId, messageId, callbackQueryId);
+                default -> cleanupLocal(chatId, messageId, callbackQueryId);
+            }
         }
     }
 
@@ -90,7 +126,7 @@ public class MediaCleanupCallbackHandler implements TelegramCallbackHandler {
             editOrSend(
                     chatId,
                     messageId,
-                    "Домашнюю медиатеку пока не удалось очистить.\nПроверь HOME_WEBDAV_ENABLED, HOME_WEBDAV_BASE_URL и доступность домашнего ПК через Tailscale.",
+                    "Не удалось завершить очистку. Домашний ПК недоступен.\n\nЧасть файлов могла быть удалена. Проверь медиатеку перед повторной попыткой.",
                     telegramKeyboardFactory.backToMenuKeyboard()
             );
         }
@@ -114,14 +150,14 @@ public class MediaCleanupCallbackHandler implements TelegramCallbackHandler {
             editOrSend(
                     chatId,
                     messageId,
-                    "S3 медиатеку пока не удалось очистить. Проверь S3-настройки и доступность bucket.",
+                    "Не удалось завершить очистку S3.\n\nЧасть файлов могла быть удалена. Проверь медиатеку перед повторной попыткой.",
                     telegramKeyboardFactory.backToMenuKeyboard()
             );
         }
     }
 
     public String cleanupAskText() {
-        return "Что очистить?\n\nVPS - локальная WebDAV-медиатека на сервере.\nДомашняя медиатека - WebDAV-папка на домашнем ПК.\nS3 - только объекты внутри настроенного prefix.";
+        return "🗑 Очистка медиатеки\n\nВыбери хранилище. Перед удалением всех файлов я запрошу подтверждение.";
     }
 
     private void editOrSend(Long chatId, Long messageId, String text, String keyboardJson) {

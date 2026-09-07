@@ -37,7 +37,7 @@ class TorrentSearchMessageHandlerTest {
         verify(telegramMessageService).sendTyping(42L);
         verify(torrentSearchService).searchFirstPage("zxqv-no-tmdb-match-884421");
         verify(movieMetadataService, never()).search("zxqv-no-tmdb-match-884421");
-        verify(telegramMessageService).sendText(42L, "Ничего не нашёл");
+        verify(telegramMessageService).sendTextWithInlineKeyboard(org.mockito.ArgumentMatchers.eq(42L), org.mockito.ArgumentMatchers.contains("Ничего не нашёл"), org.mockito.ArgumentMatchers.contains("menu:home"));
     }
 
     @Test
@@ -60,7 +60,7 @@ class TorrentSearchMessageHandlerTest {
         verify(movieMetadataService).findCached("Матрица");
         verify(movieMetadataService, never()).search("Матрица");
         verify(torrentSearchService).searchFirstPage("Матрица");
-        verify(telegramMessageService).sendText(42L, "Ничего не нашёл");
+        verify(telegramMessageService).sendTextWithInlineKeyboard(org.mockito.ArgumentMatchers.eq(42L), org.mockito.ArgumentMatchers.contains("Ничего не нашёл"), org.mockito.ArgumentMatchers.contains("menu:home"));
     }
 
     @Test
@@ -88,7 +88,7 @@ class TorrentSearchMessageHandlerTest {
                 torrentSearchService,
                 movieMetadataService,
                 inlineResultFactory,
-                mock(TelegramKeyboardFactory.class),
+                new TelegramKeyboardFactory(),
                 telegramMessageService,
                 new AppProperties(100, 100, 100, "", true, 30, 24, 3, 30, 48),
                 new TelegramProperties("token", "magnettto_bot", "http://telegram", 1000, 1000, 1000,
@@ -111,7 +111,7 @@ class TorrentSearchMessageHandlerTest {
                 torrentSearchService,
                 movieMetadataService,
                 mock(TelegramInlineResultFactory.class),
-                mock(TelegramKeyboardFactory.class),
+                new TelegramKeyboardFactory(),
                 telegramMessageService,
                 new AppProperties(100, 100, 100, "", true, 30, 24, 3, 30, 48),
                 new TelegramProperties("token", "magnettto_bot", "http://telegram", 1000, 1000, 1000,

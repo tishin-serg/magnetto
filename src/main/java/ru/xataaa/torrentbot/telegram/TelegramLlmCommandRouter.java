@@ -45,6 +45,19 @@ public class TelegramLlmCommandRouter {
     private MovieDownloadConfirmationService confirmations;
 
     public void route(Long chatId, String text) {
+        if (!appProperties.isChatAllowed(chatId)) {
+            unknownMessageHandler.handle(chatId, text);
+            return;
+        }
+        mediaCleanupCallbackHandler.cancelPending(chatId);
+        String navigation = navigation(text);
+        if (navigation != null) {
+            if (confirmations != null) confirmations.leaveInput(chatId);
+            userDialogStateRepository.save(UserDialogState.empty(chatId));
+            if (navigation.equals("start")) legacyRouter.route(chatId, "/start");
+            else menuCallbackHandler.handle(null, chatId, null, navigation);
+            return;
+        }
         if (confirmations != null && confirmations.consumeInput(chatId, text)) return;
         if (!llmProperties.enabled() || isLegacyText(text)) {
             legacyRouter.route(chatId, text);
@@ -73,6 +86,21 @@ public class TelegramLlmCommandRouter {
         }
         userDialogStateRepository.save(llmRouter.updateState(chatId, routeResult));
         dispatch(chatId, text, routeResult);
+    }
+
+    static String navigation(String text) {
+        String value = text == null ? "" : text.trim();
+        String command = value.split("\\s+", 2)[0].replaceFirst("@\\w+$", "");
+        if (command.equals("/start") || command.equals("/menu")) return "start";
+        if (command.equals("/cancel")) return "menu:home";
+        return switch (value) {
+            case "🔎 Поиск" -> "menu:search";
+            case "📥 Загрузки" -> "menu:tasks";
+            case "🎬 Медиатека" -> "menu:libraries";
+            case "⚙️ Настройки" -> "menu:settings";
+            case "🏠 Главное меню" -> "start";
+            default -> null;
+        };
     }
 
     private boolean routeFast(Long chatId, String text) {

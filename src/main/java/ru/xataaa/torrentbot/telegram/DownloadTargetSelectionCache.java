@@ -24,11 +24,16 @@ public class DownloadTargetSelectionCache {
 
     public Optional<PendingDownload> find(String selectionId, Long chatId) {
         PendingDownload pendingDownload = pendingDownloads.get(selectionId);
-        if (pendingDownload == null || pendingDownload.expiresAt().isBefore(Instant.now()) || !pendingDownload.chatId().equals(chatId)) {
+        if (pendingDownload == null || pendingDownload.expiresAt().isBefore(Instant.now())) {
             pendingDownloads.remove(selectionId);
             return Optional.empty();
         }
+        if (!pendingDownload.chatId().equals(chatId)) return Optional.empty();
         return Optional.of(pendingDownload);
+    }
+
+    public boolean consume(String selectionId, PendingDownload expected) {
+        return pendingDownloads.remove(selectionId, expected);
     }
 
     public void remove(String selectionId) {
