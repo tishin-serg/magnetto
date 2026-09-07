@@ -106,8 +106,8 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         for (DownloadFile file : files) {
             downloadFileRepository.updateStatus(file.getId(), DownloadFileStatus.READY_TO_UPLOAD);
         }
-        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectionFiles(downloadJob.getId())), downloadJob.getId())) {
-            telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
+        if (requiresDiskSpaceCheck(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectionFiles(downloadJob.getId())), downloadJob)) {
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места в медиатеке");
             return;
         }
         startSelectedFiles(downloadJob, selectionFiles(downloadJob.getId()));
@@ -126,8 +126,8 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Выбери хотя бы один файл");
             return;
         }
-        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectedFiles), downloadJob.getId())) {
-            telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
+        if (requiresDiskSpaceCheck(downloadJob) && !hasEnoughSpace(chatId, messageId, sumSize(selectedFiles), downloadJob)) {
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места в медиатеке");
             return;
         }
         startSelectedFiles(downloadJob, selectedFiles);
@@ -209,8 +209,8 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
                     : DownloadFileStatus.SKIPPED_BY_USER;
             downloadFileRepository.updateStatus(file.getId(), status);
         }
-        if (usesVpsStorage(downloadJob) && !hasEnoughSpace(chatId, messageId, selectedFile.getSizeBytes(), downloadJob.getId())) {
-            telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места на сервере");
+        if (requiresDiskSpaceCheck(downloadJob) && !hasEnoughSpace(chatId, messageId, selectedFile.getSizeBytes(), downloadJob)) {
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Мало места в медиатеке");
             return;
         }
         startSelectedFiles(downloadJob, List.of(selectedFile));
@@ -317,17 +317,18 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         return text.toString();
     }
 
-    private boolean hasEnoughSpace(Long chatId, Long messageId, long requiredBytes, UUID jobId) {
-        if (diskSpaceService.hasEnoughSpace(requiredBytes)) {
+    private boolean hasEnoughSpace(Long chatId, Long messageId, long requiredBytes, DownloadJob downloadJob) {
+        DownloadTarget downloadTarget = downloadTarget(downloadJob);
+        if (diskSpaceService.hasEnoughSpace(downloadTarget, requiredBytes)) {
             return true;
         }
-        DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo();
-        String text = "Не начинаю скачивание: выбранные файлы больше свободного места на сервере.\n\n"
+        DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo(downloadTarget);
+        String text = "Не начинаю скачивание: выбранные файлы больше свободного места в медиатеке.\n\n"
                 + "Нужно примерно: " + fileSizeFormatter.format(requiredBytes) + "\n"
                 + "Свободно: " + fileSizeFormatter.format(diskSpaceInfo.usableBytes()) + "\n\n"
                 + "Выбери меньше файлов или очисти медиатеку.";
         telegramMessageService.editText(chatId, messageId, text,
-                fileSelectionViewFactory.keyboard(selectionFiles(jobId), jobId, 0));
+                fileSelectionViewFactory.keyboard(selectionFiles(downloadJob.getId()), downloadJob.getId(), 0));
         return false;
     }
 
@@ -339,8 +340,8 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         return downloadJob.getDownloadTarget() == null ? DownloadTarget.VPS : downloadJob.getDownloadTarget();
     }
 
-    private boolean usesVpsStorage(DownloadJob downloadJob) {
+    private boolean requiresDiskSpaceCheck(DownloadJob downloadJob) {
         DownloadTarget target = downloadTarget(downloadJob);
-        return target == DownloadTarget.VPS || target.isS3();
+        return target == DownloadTarget.VPS || target == DownloadTarget.HOME_PC;
     }
 }

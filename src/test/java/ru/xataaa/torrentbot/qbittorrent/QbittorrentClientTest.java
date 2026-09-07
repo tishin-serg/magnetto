@@ -82,6 +82,22 @@ class QbittorrentClientTest {
         assertThat(requests.get(1)).doesNotContain("stopCondition");
     }
 
+    @Test
+    void shouldReadFreeSpaceFromSelectedQbittorrent() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/api/v2/transfer/info", exchange -> {
+            byte[] response = "{\"free_space_on_disk\":123456789}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(response);
+            }
+        });
+        server.start();
+
+        assertThat(client().getTransferInfo(DownloadTarget.VPS).getFreeSpaceOnDisk()).isEqualTo(123456789L);
+    }
+
     private QbittorrentClient client() {
         QbittorrentAuthService authService = mock(QbittorrentAuthService.class);
         when(authService.getSessionCookie(DownloadTarget.VPS)).thenReturn("SID=test");

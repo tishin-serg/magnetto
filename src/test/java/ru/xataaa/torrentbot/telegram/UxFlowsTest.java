@@ -166,7 +166,9 @@ class UxFlowsTest {
         var jobs = mock(DownloadJobService.class);
         String id = cache.put(42L, "magnet:test", 10, "Movie");
         assertThat(cache.find(id, 43L)).isEmpty();
-        var handler = new DownloadTargetSelectionCallbackHandler(cache, jobs, messages, s3);
+        var diskSpace = mock(DiskSpaceService.class);
+        when(diskSpace.downloadStorageInfo(DownloadTarget.HOME_PC)).thenReturn(new DiskSpaceService.DiskSpaceInfo(-1L, 100L));
+        var handler = new DownloadTargetSelectionCallbackHandler(cache, jobs, messages, s3, diskSpace, mock(FileSizeFormatter.class));
         handler.handle("q", 42L, 100L, "target:select:" + id + ":HOME_PC");
         handler.handle("q2", 42L, 100L, "target:select:" + id + ":HOME_PC");
         verify(jobs, times(1)).startDownload(42L, "magnet:test", 10, DownloadTarget.HOME_PC, "Movie");
@@ -176,7 +178,8 @@ class UxFlowsTest {
         var cache = new DownloadTargetSelectionCache();
         var jobs = mock(DownloadJobService.class);
         String id = cache.put(42L, "magnet:test", 10, "Movie");
-        var handler = new DownloadTargetSelectionCallbackHandler(cache, jobs, messages, s3);
+        var handler = new DownloadTargetSelectionCallbackHandler(cache, jobs, messages, s3,
+                mock(DiskSpaceService.class), mock(FileSizeFormatter.class));
         handler.handle("q", 42L, 100L, "target:select:" + id + ":CANCEL");
         handler.handle("q2", 42L, 100L, "target:select:" + id + ":HOME_PC");
         verifyNoInteractions(jobs);
