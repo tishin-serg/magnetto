@@ -59,9 +59,16 @@ public class DownloadSpeedMonitorRepository {
 
     public boolean claimReplacement(UUID jobId, UUID replacementJobId, LocalDateTime now) {
         return jdbc.update("""
-                update download_speed_monitor set replacement_job_id=?, stopped_at=?
-                where job_id=? and replacement_job_id is null and stopped_at is null
+                update download_speed_monitor set replacement_job_id=?, decision_resolved=true, stopped_at=coalesce(stopped_at,?)
+                where job_id=? and replacement_job_id is null and alert_sent=true and decision_resolved=false
                 """, replacementJobId, now, jobId) == 1;
+    }
+
+    public boolean keepCurrent(UUID jobId, LocalDateTime now) {
+        return jdbc.update("""
+                update download_speed_monitor set decision_resolved=true, stopped_at=coalesce(stopped_at,?)
+                where job_id=? and alert_sent=true and decision_resolved=false
+                """, now, jobId) == 1;
     }
 
     public void stop(UUID jobId, LocalDateTime now) {
@@ -72,7 +79,7 @@ public class DownloadSpeedMonitorRepository {
         return new DownloadSpeedMonitor(rs.getObject("job_id", UUID.class),
                 rs.getTimestamp("started_at").toLocalDateTime(), rs.getTimestamp("ends_at").toLocalDateTime(),
                 rs.getTimestamp("next_check_at").toLocalDateTime(), nullableLong(rs, "last_speed_bps"),
-                rs.getInt("consecutive_low_checks"), rs.getBoolean("alert_sent"),
+                rs.getInt("consecutive_low_checks"), rs.getBoolean("alert_sent"), rs.getBoolean("decision_resolved"),
                 nullableTime(rs, "stopped_at"), rs.getObject("replacement_job_id", UUID.class));
     }
 

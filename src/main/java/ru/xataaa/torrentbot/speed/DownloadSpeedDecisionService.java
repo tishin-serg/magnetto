@@ -1,6 +1,5 @@
 package ru.xataaa.torrentbot.speed;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +10,7 @@ import ru.xataaa.torrentbot.job.DownloadJobService;
 import ru.xataaa.torrentbot.job.DownloadJobStatus;
 import ru.xataaa.torrentbot.qbittorrent.QbittorrentTorrentService;
 import ru.xataaa.torrentbot.telegram.TelegramMessageService;
+import ru.xataaa.torrentbot.common.TimeProvider;
 
 @Service
 @RequiredArgsConstructor
@@ -21,17 +21,22 @@ public class DownloadSpeedDecisionService {
     private final DownloadJobService jobService;
     private final QbittorrentTorrentService torrents;
     private final TelegramMessageService messages;
+    private final TimeProvider timeProvider;
 
     public void thresholdReached(DownloadJob job, long speedBytesPerSecond) {
         if (!monitorRepository.markAlertSent(job.getId())) return;
         List<DownloadAlternative> alternatives = alternativeRepository.findByJobId(job.getId());
         if (job.isAutoReplaceSlowDownload() && !alternatives.isEmpty()) {
-            if (replace(job, alternatives.getFirst())) {
-                messages.sendText(job.getChatId(), alertText(job, speedBytesPerSecond)
-                        + "\n\nАвтозамена включена: текущая раздача поставлена на паузу, запускаю «"
-                        + alternatives.getFirst().title() + "».");
+            try {
+                if (replace(job, alternatives.getFirst())) {
+                    messages.sendText(job.getChatId(), alertText(job, speedBytesPerSecond)
+                            + "\n\nАвтозамена включена: текущая раздача поставлена на паузу, запускаю «"
+                            + title(alternatives.getFirst()) + "».");
+                    return;
+                }
+            } catch (RuntimeException exception) {
+                // Alert is already claimed; show the manual decision below instead of losing it.
             }
-            return;
         }
         messages.sendTextWithInlineKeyboard(job.getChatId(), alertText(job, speedBytesPerSecond),
                 decisionKeyboard(job.getId(), !alternatives.isEmpty()));
@@ -41,7 +46,7 @@ public class DownloadSpeedDecisionService {
         if (job.getStatus() != DownloadJobStatus.DOWNLOADING || job.getTorrentHash() == null) return false;
         UUID replacementId = UUID.randomUUID();
         torrents.pauseTorrent(job.getDownloadTarget(), job.getTorrentHash());
-        if (!monitorRepository.claimReplacement(job.getId(), replacementId, LocalDateTime.now())) return false;
+        if (!monitorRepository.claimReplacement(job.getId(), replacementId, timeProvider.now())) return false;
         jobRepository.pauseWithResumeStatus(job.getId(), DownloadJobStatus.DOWNLOADING);
         List<DownloadAlternative> remaining = alternativeRepository.findByJobId(job.getId()).stream()
                 .filter(item -> item.position() != selected.position()).toList();
@@ -67,5 +72,9 @@ public class DownloadSpeedDecisionService {
         if (bytesPerSecond < 1_000_000L) return Math.round(bytesPerSecond / 1_000.0) + " КБ/с";
         double mb = bytesPerSecond / 1_000_000.0;
         return (mb == Math.rint(mb) ? Long.toString(Math.round(mb)) : String.format(java.util.Locale.ROOT, "%.1f", mb)) + " МБ/с";
+    }
+
+    private String title(DownloadAlternative alternative) {
+        return alternative.title() == null || alternative.title().isBlank() ? "другая раздача" : alternative.title();
     }
 }

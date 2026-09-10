@@ -7,7 +7,8 @@ import ru.xataaa.torrentbot.job.DownloadJob;
 import ru.xataaa.torrentbot.job.DownloadJobRepository;
 import ru.xataaa.torrentbot.speed.DownloadAlternativeRepository;
 import ru.xataaa.torrentbot.speed.DownloadSpeedDecisionService;
-import ru.xataaa.torrentbot.speed.DownloadSpeedMonitorLifecycle;
+import ru.xataaa.torrentbot.speed.DownloadSpeedMonitorRepository;
+import ru.xataaa.torrentbot.common.TimeProvider;
 
 @Component
 @RequiredArgsConstructor
@@ -15,8 +16,9 @@ public class DownloadSpeedCallbackHandler implements TelegramCallbackHandler {
     private final DownloadJobRepository jobs;
     private final DownloadAlternativeRepository alternatives;
     private final DownloadSpeedDecisionService decisions;
-    private final DownloadSpeedMonitorLifecycle lifecycle;
+    private final DownloadSpeedMonitorRepository monitorRepository;
     private final TelegramMessageService messages;
+    private final TimeProvider timeProvider;
 
     @Override public boolean supports(String data) { return data != null && data.startsWith("speed:"); }
 
@@ -29,7 +31,9 @@ public class DownloadSpeedCallbackHandler implements TelegramCallbackHandler {
             messages.answerCallbackQuery(queryId, "Задача не найдена"); return;
         }
         if ("keep".equals(parts[1])) {
-            lifecycle.stop(job.getId());
+            if (!monitorRepository.keepCurrent(job.getId(), timeProvider.now())) {
+                messages.answerCallbackQuery(queryId, "Выбор уже обработан или устарел"); return;
+            }
             messages.answerCallbackQuery(queryId, "Оставляю текущую раздачу");
             messages.editText(chatId, messageId, "Текущая загрузка продолжится без автоматической замены.", "{\"inline_keyboard\":[]}");
             return;

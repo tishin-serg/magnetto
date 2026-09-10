@@ -35,7 +35,9 @@ public class DownloadSpeedMonitorScheduler {
             return;
         }
         DownloadJob job = jobRepository.findById(monitor.jobId()).orElse(null);
-        if (job == null || job.getStatus() != DownloadJobStatus.DOWNLOADING || job.getTorrentHash() == null) {
+        boolean downloading = job != null && (job.getStatus() == DownloadJobStatus.DOWNLOADING
+                || (job.getStatus() == DownloadJobStatus.RETRY_WAITING && job.getResumeStatus() == DownloadJobStatus.DOWNLOADING));
+        if (!downloading || job.getTorrentHash() == null) {
             monitorRepository.stop(monitor.jobId(), now);
             return;
         }

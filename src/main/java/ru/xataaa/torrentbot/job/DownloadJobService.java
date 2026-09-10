@@ -64,9 +64,10 @@ public class DownloadJobService {
 
     public void startDownload(Long chatId, String magnetUrl, long expectedSizeBytes, DownloadTarget downloadTarget,
             String preferredTorrentName, DownloadPreferences preferences, List<TorrentSearchResult> alternatives) {
+        boolean enforceSizePolicy = preferences != null;
         DownloadPreferences effectivePreferences = preferences == null ? preferencesRepository.find(chatId) : preferences;
         createAndStart(UUID.randomUUID(), chatId, magnetUrl, expectedSizeBytes, downloadTarget, preferredTorrentName,
-                effectivePreferences, alternatives, List.of());
+                effectivePreferences, alternatives, List.of(), enforceSizePolicy);
     }
 
     public void startReplacement(UUID replacementJobId, DownloadJob source, DownloadAlternative selected,
@@ -74,12 +75,13 @@ public class DownloadJobService {
         DownloadPreferences snapshot = new DownloadPreferences(0, Long.MAX_VALUE, 1, source.getDownloadTarget(),
                 source.getMinDownloadSpeedBytesPerSecond(), source.isAutoReplaceSlowDownload());
         createAndStart(replacementJobId, source.getChatId(), selected.magnetUrl(), selected.sizeBytes(),
-                source.getDownloadTarget(), selected.title(), snapshot, List.of(), remainingAlternatives);
+                source.getDownloadTarget(), selected.title(), snapshot, List.of(), remainingAlternatives, false);
     }
 
     private void createAndStart(UUID jobId, Long chatId, String magnetUrl, long expectedSizeBytes,
             DownloadTarget downloadTarget, String preferredTorrentName, DownloadPreferences preferences,
-            List<TorrentSearchResult> alternatives, List<DownloadAlternative> savedAlternatives) {
+            List<TorrentSearchResult> alternatives, List<DownloadAlternative> savedAlternatives,
+            boolean enforceSizePolicy) {
         if (!appProperties.isChatAllowed(chatId)) {
             telegramMessageService.sendText(chatId, "Доступ запрещён.");
             log.warn("Access denied: chatId={}", chatId);
@@ -110,7 +112,8 @@ public class DownloadJobService {
                 .updatedAt(now)
                 .build();
 
-        sizeGuard.saveJob(downloadJob, preferences);
+        if (enforceSizePolicy) sizeGuard.saveJob(downloadJob, preferences);
+        else downloadJobRepository.save(downloadJob);
         alternativeRepository.saveResults(jobId, magnetUrl, alternatives);
         alternativeRepository.saveAlternatives(jobId, savedAlternatives);
         log.info("Creating download job: jobId={}, chatId={}, downloadTarget={}", jobId, chatId, effectiveDownloadTarget);

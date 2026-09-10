@@ -299,6 +299,7 @@
                 last_speed_bps BIGINT,
                 consecutive_low_checks INT NOT NULL DEFAULT 0,
                 alert_sent BOOLEAN NOT NULL DEFAULT FALSE,
+                decision_resolved BOOLEAN NOT NULL DEFAULT FALSE,
                 stopped_at TIMESTAMP,
                 replacement_job_id UUID REFERENCES download_job(id)
             );
