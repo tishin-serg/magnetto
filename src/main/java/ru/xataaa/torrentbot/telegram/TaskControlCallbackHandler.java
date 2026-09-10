@@ -9,6 +9,7 @@ import ru.xataaa.torrentbot.job.DownloadJobStatus;
 import ru.xataaa.torrentbot.job.DownloadOrchestrator;
 import ru.xataaa.torrentbot.job.DownloadTarget;
 import ru.xataaa.torrentbot.qbittorrent.QbittorrentTorrentService;
+import ru.xataaa.torrentbot.speed.DownloadSpeedMonitorLifecycle;
 
 @Component
 @RequiredArgsConstructor
@@ -23,6 +24,8 @@ public class TaskControlCallbackHandler implements TelegramCallbackHandler {
     private final DownloadOrchestrator downloadOrchestrator;
     private final TelegramMessageService telegramMessageService;
     private final TaskOverviewService taskOverviewService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private DownloadSpeedMonitorLifecycle speedMonitorLifecycle;
 
     @Override
     public boolean supports(String data) {
@@ -59,6 +62,7 @@ public class TaskControlCallbackHandler implements TelegramCallbackHandler {
             qbittorrentTorrentService.pauseTorrent(downloadTarget(downloadJob), downloadJob.getTorrentHash());
         }
         downloadJobRepository.pauseWithResumeStatus(downloadJob.getId(), downloadJob.getStatus());
+        if (speedMonitorLifecycle != null) speedMonitorLifecycle.stop(downloadJob.getId());
         telegramMessageService.answerCallbackQuery(callbackQueryId, "Задача поставлена на паузу");
         telegramMessageService.editText(chatId, messageId, taskOverviewService.text(), taskOverviewService.keyboard());
     }

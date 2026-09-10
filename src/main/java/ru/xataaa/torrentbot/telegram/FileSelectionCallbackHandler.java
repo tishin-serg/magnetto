@@ -15,6 +15,7 @@ import ru.xataaa.torrentbot.file.DownloadFileStatus;
 import ru.xataaa.torrentbot.job.DownloadJob;
 import ru.xataaa.torrentbot.job.DownloadJobRepository;
 import ru.xataaa.torrentbot.job.DownloadJobStatus;
+import ru.xataaa.torrentbot.speed.DownloadSpeedMonitorLifecycle;
 import ru.xataaa.torrentbot.job.DownloadOrchestrator;
 import ru.xataaa.torrentbot.job.DownloadTarget;
 import ru.xataaa.torrentbot.qbittorrent.QbittorrentTorrentService;
@@ -33,6 +34,8 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
 
     private final DownloadFileRepository downloadFileRepository;
     private final DownloadJobRepository downloadJobRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private DownloadSpeedMonitorLifecycle speedMonitorLifecycle;
     private final DownloadOrchestrator downloadOrchestrator;
     private final TelegramMessageService telegramMessageService;
     private final QbittorrentTorrentService qbittorrentTorrentService;
@@ -226,6 +229,8 @@ public class FileSelectionCallbackHandler implements TelegramCallbackHandler {
         verifySelectedFilePriorities(downloadJob, allFileIndexes, selectedFileIndexes);
         qbittorrentTorrentService.resumeTorrent(downloadTarget(downloadJob), downloadJob.getTorrentHash());
         downloadJobRepository.updateStatus(downloadJob.getId(), DownloadJobStatus.DOWNLOADING);
+        if (speedMonitorLifecycle != null)
+            speedMonitorLifecycle.start(downloadJob.getId(), downloadJob.getMinDownloadSpeedBytesPerSecond());
         downloadOrchestrator.processJob(downloadJob.getId());
     }
 

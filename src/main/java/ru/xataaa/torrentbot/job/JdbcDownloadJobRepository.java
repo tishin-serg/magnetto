@@ -29,12 +29,14 @@ public class JdbcDownloadJobRepository implements DownloadJobRepository {
                     id, chat_id, magnet_url, magnet_url_hash, torrent_hash, torrent_name, status, resume_status,
                     download_target, target_status, target_error_message,
                     error_code, error_message, retry_count, next_retry_at, delete_after_upload,
-                    last_reported_progress_percent, status_message_id, created_at, updated_at, completed_at, failed_at
+                    last_reported_progress_percent, status_message_id, min_download_speed_bps, auto_replace_slow_download,
+                    created_at, updated_at, completed_at, failed_at
                 ) values (
                     :id, :chatId, :magnetUrl, :magnetUrlHash, :torrentHash, :torrentName, :status, :resumeStatus,
                     :downloadTarget, :targetStatus, :targetErrorMessage,
                     :errorCode, :errorMessage, :retryCount, :nextRetryAt, :deleteAfterUpload,
-                    :lastReportedProgressPercent, :statusMessageId, :createdAt, :updatedAt, :completedAt, :failedAt
+                    :lastReportedProgressPercent, :statusMessageId, :minDownloadSpeedBps, :autoReplaceSlowDownload,
+                    :createdAt, :updatedAt, :completedAt, :failedAt
                 )
                 """;
         jdbcTemplate.update(sql, toParameters(downloadJob));
@@ -284,6 +286,8 @@ public class JdbcDownloadJobRepository implements DownloadJobRepository {
         values.put("deleteAfterUpload", downloadJob.isDeleteAfterUpload());
         values.put("lastReportedProgressPercent", downloadJob.getLastReportedProgressPercent());
         values.put("statusMessageId", downloadJob.getStatusMessageId());
+        values.put("minDownloadSpeedBps", downloadJob.getMinDownloadSpeedBytesPerSecond());
+        values.put("autoReplaceSlowDownload", downloadJob.isAutoReplaceSlowDownload());
         values.put("createdAt", downloadJob.getCreatedAt());
         values.put("updatedAt", downloadJob.getUpdatedAt());
         values.put("completedAt", downloadJob.getCompletedAt());
@@ -319,6 +323,8 @@ public class JdbcDownloadJobRepository implements DownloadJobRepository {
                 .deleteAfterUpload(resultSet.getBoolean("delete_after_upload"))
                 .lastReportedProgressPercent(resultSet.getInt("last_reported_progress_percent"))
                 .statusMessageId(statusMessageId)
+                .minDownloadSpeedBytesPerSecond(resultSet.getLong("min_download_speed_bps"))
+                .autoReplaceSlowDownload(resultSet.getBoolean("auto_replace_slow_download"))
                 .createdAt(resultSet.getTimestamp("created_at").toLocalDateTime())
                 .updatedAt(resultSet.getTimestamp("updated_at").toLocalDateTime())
                 .completedAt(toLocalDateTime(resultSet.getTimestamp("completed_at")))

@@ -146,12 +146,13 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
                     messages.sendText(chatId, "S3 сейчас недоступен. Выбери другое место в условиях заявки."); return;
                 }
                 TorrentSearchResult result = session.candidates.get(session.index).result();
+                List<TorrentSearchResult> alternatives = session.candidates.stream().map(TorrentAvailabilityItem::result).toList();
                 session.closed = true;
                 inputs.remove(chatId);
                 // Consume confirmation before invoking the job service: repeated clicks cannot create a second job.
                 render(session, messageId, "Подтверждено. Создаю задачу…", List.of());
                 jobs.startDownload(chatId, result.magnetUri(), result.sizeBytes(),
-                        session.preferences.target(), result.title(), session.preferences);
+                        session.preferences.target(), result.title(), session.preferences, alternatives);
                 return;
             }
             session.revision++;
@@ -165,9 +166,10 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
                 session.editing = true; editor(session, messageId); return;
             }
             if (action.equals("field") && parts.length == 5) {
-                if (!session.editing || !Set.of("min", "max", "seeds").contains(parts[4])) return;
+                if (!session.editing || !Set.of("min", "max", "seeds", "speed").contains(parts[4])) return;
                 inputs.put(chatId, new Input(session.id, parts[4], session.revision, Instant.now().plusSeconds(600), messageId));
                 String prompt = parts[4].equals("seeds") ? "Введи минимальное число сидов (целое, от 1)."
+                        : parts[4].equals("speed") ? "Введи минимальную скорость в МБ/с. Значение 0 отключает мониторинг."
                         : "Введи размер «" + (parts[4].equals("min") ? "от" : "до") + "» в ГБ, например 4,5.";
                 render(session, messageId, prompt + "\n\nСейчас: " + session.preferences.summary(), List.of(List.of(button(session, "← Назад", "edit")))); return;
             }
@@ -177,6 +179,10 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
                             List.of(List.of(button(session, "← Настройки", "edit")))); return;
                 }
                 session.preferences = session.preferences.with("target", parts[4]);
+                saveDefaults(session); editor(session, messageId); return;
+            }
+            if (action.equals("auto") && session.editing) {
+                session.preferences = session.preferences.with("auto", Boolean.toString(!session.preferences.autoReplaceSlowDownload()));
                 saveDefaults(session); editor(session, messageId); return;
             }
             if (action.equals("back")) {
@@ -244,6 +250,8 @@ public class MovieDownloadConfirmationService implements TelegramCallbackHandler
         render(session, messageId, text, List.of(
                 List.of(button(session, "Размер от", "field:min"), button(session, "Размер до", "field:max")),
                 List.of(button(session, "Минимум сидов", "field:seeds")),
+                List.of(button(session, "Мин. скорость", "field:speed")),
+                List.of(button(session, session.preferences.autoReplaceSlowDownload() ? "🤖 Автозамена: вкл" : "🤖 Автозамена: выкл", "auto")),
                 List.of(button(session, "Домашний ПК", "target:HOME_PC"), button(session, "VPS", "target:VPS")),
                 List.of(button(session, "Облако · S3", "target:S3")),
                 List.of(button(session, session.movie == null ? "Готово" : "Подобрать раздачу", "back")),

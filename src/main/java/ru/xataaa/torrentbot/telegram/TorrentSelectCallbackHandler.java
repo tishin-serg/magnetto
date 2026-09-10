@@ -77,7 +77,8 @@ public class TorrentSelectCallbackHandler implements TelegramCallbackHandler {
         telegramMessageService.answerCallbackQuery(callbackQueryId, "Выбери место скачивания");
         log.info("Torrent selected from search: chatId={}, title={}, seeders={}",
                 chatId, torrentSearchResult.title(), torrentSearchResult.seeders());
-        downloadTargetSelectionService.askTarget(chatId, torrentSearchResult.magnetUri(), torrentSearchResult.sizeBytes(), torrentSearchResult.title());
+        downloadTargetSelectionService.askTarget(chatId, torrentSearchResult.magnetUri(), torrentSearchResult.sizeBytes(),
+                torrentSearchResult.title(), torrentSearchCache.alternativesFor(torrentSearchResult.selectionId()));
     }
 
     private boolean requiresSeasonPackConfirmation(TorrentSearchResult torrentSearchResult) {

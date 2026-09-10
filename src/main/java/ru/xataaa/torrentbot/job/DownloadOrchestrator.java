@@ -38,6 +38,7 @@ import ru.xataaa.torrentbot.retry.RetryableOperationException;
 import ru.xataaa.torrentbot.telegram.TelegramKeyboardFactory;
 import ru.xataaa.torrentbot.telegram.TelegramMessageService;
 import ru.xataaa.torrentbot.telegram.FileSelectionViewFactory;
+import ru.xataaa.torrentbot.speed.DownloadSpeedMonitorLifecycle;
 
 @Slf4j
 @Service
@@ -63,6 +64,8 @@ public class DownloadOrchestrator {
     private final TimeProvider timeProvider;
     private final AppProperties appProperties;
     private final DownloadTelemetry downloadTelemetry;
+    @org.springframework.beans.factory.annotation.Autowired
+    private DownloadSpeedMonitorLifecycle speedMonitorLifecycle;
     private final ConcurrentMap<UUID, Boolean> runningJobs = new ConcurrentHashMap<>();
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -492,6 +495,12 @@ public class DownloadOrchestrator {
     private void changeStatus(DownloadJob downloadJob, DownloadJobStatus newStatus) {
         log.info("Changing job status: jobId={}, oldStatus={}, newStatus={}", downloadJob.getId(), downloadJob.getStatus(), newStatus);
         downloadJobRepository.updateStatus(downloadJob.getId(), newStatus);
+        if (newStatus == DownloadJobStatus.DOWNLOADING && downloadJob.getStatus() != DownloadJobStatus.DOWNLOADING) {
+            if (speedMonitorLifecycle != null)
+                speedMonitorLifecycle.start(downloadJob.getId(), downloadJob.getMinDownloadSpeedBytesPerSecond());
+        } else if (downloadJob.getStatus() == DownloadJobStatus.DOWNLOADING && newStatus != DownloadJobStatus.DOWNLOADING) {
+            if (speedMonitorLifecycle != null) speedMonitorLifecycle.stop(downloadJob.getId());
+        }
     }
 
     private void scheduleRetry(DownloadJob downloadJob, DownloadJobStatus resumeStatus, ErrorCode errorCode, String errorMessage) {

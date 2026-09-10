@@ -68,7 +68,7 @@ class MovieDownloadConfirmationServiceTest {
         service.handle("q", 42L, 100L, confirm);
         service.handle("q2", 42L, 100L, confirm);
         verify(jobs, times(1)).startDownload(eq(42L), contains("Second"), eq(7 * DownloadPreferences.GB),
-                eq(DownloadTarget.HOME_PC), eq("Second"), eq(DownloadPreferences.defaults()));
+                eq(DownloadTarget.HOME_PC), eq("Second"), eq(DownloadPreferences.defaults()), anyList());
     }
 
     @Test void changingVariantInvalidatesOldConfirmation() throws Exception {
@@ -78,7 +78,7 @@ class MovieDownloadConfirmationServiceTest {
         service.handle("q2", 42L, 100L, old);
         verifyNoInteractions(jobs);
         service.handle("q3", 42L, 100L, editedCallback("✅ Скачать"));
-        verify(jobs).startDownload(eq(42L), contains("First"), anyLong(), any(), eq("First"), any());
+        verify(jobs).startDownload(eq(42L), contains("First"), anyLong(), any(), eq("First"), any(), anyList());
     }
 
     @Test void anotherUserCannotConfirmAndCancelInvalidates() throws Exception {
