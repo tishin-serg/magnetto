@@ -3,6 +3,8 @@ package ru.xataaa.torrentbot.telegram;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.xataaa.torrentbot.common.FileSizeFormatter;
+import java.util.List;
+import ru.xataaa.torrentbot.torrentsearch.TorrentSearchResult;
 
 @Service
 @RequiredArgsConstructor
@@ -13,7 +15,12 @@ public class DownloadTargetSelectionService {
     private final FileSizeFormatter fileSizeFormatter;
 
     public void askTarget(Long chatId, String magnetUrl, long expectedSizeBytes, String title) {
-        String selectionId = downloadTargetSelectionCache.put(chatId, magnetUrl, expectedSizeBytes, title);
+        askTarget(chatId, magnetUrl, expectedSizeBytes, title, List.of());
+    }
+
+    public void askTarget(Long chatId, String magnetUrl, long expectedSizeBytes, String title,
+                          List<TorrentSearchResult> alternatives) {
+        String selectionId = downloadTargetSelectionCache.put(chatId, magnetUrl, expectedSizeBytes, title, alternatives);
         StringBuilder text = new StringBuilder();
         text.append("Куда скачать?\n\n");
         if (title != null && !title.isBlank()) {

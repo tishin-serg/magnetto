@@ -270,4 +270,41 @@
             );
         </sql>
     </changeSet>
+
+    <changeSet id="011-download-speed-monitor" author="codex">
+        <sql>
+            ALTER TABLE download_preferences
+                ADD COLUMN min_download_speed_bps BIGINT NOT NULL DEFAULT 0 CHECK (min_download_speed_bps &gt;= 0),
+                ADD COLUMN auto_replace_slow_download BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE download_job
+                ADD COLUMN min_download_speed_bps BIGINT NOT NULL DEFAULT 0 CHECK (min_download_speed_bps &gt;= 0),
+                ADD COLUMN auto_replace_slow_download BOOLEAN NOT NULL DEFAULT FALSE;
+
+            CREATE TABLE download_alternative (
+                id UUID PRIMARY KEY,
+                job_id UUID NOT NULL REFERENCES download_job(id),
+                position INT NOT NULL CHECK (position &gt;= 0),
+                magnet_url TEXT NOT NULL,
+                title TEXT,
+                size_bytes BIGINT NOT NULL DEFAULT 0,
+                UNIQUE (job_id, position)
+            );
+            CREATE INDEX idx_download_alternative_job ON download_alternative(job_id, position);
+
+            CREATE TABLE download_speed_monitor (
+                job_id UUID PRIMARY KEY REFERENCES download_job(id),
+                started_at TIMESTAMP NOT NULL,
+                ends_at TIMESTAMP NOT NULL,
+                next_check_at TIMESTAMP NOT NULL,
+                last_speed_bps BIGINT,
+                consecutive_low_checks INT NOT NULL DEFAULT 0,
+                alert_sent BOOLEAN NOT NULL DEFAULT FALSE,
+                decision_resolved BOOLEAN NOT NULL DEFAULT FALSE,
+                stopped_at TIMESTAMP,
+                replacement_job_id UUID REFERENCES download_job(id)
+            );
+            CREATE INDEX idx_download_speed_monitor_due
+                ON download_speed_monitor(next_check_at) WHERE stopped_at IS NULL;
+        </sql>
+    </changeSet>
 </databaseChangeLog>
