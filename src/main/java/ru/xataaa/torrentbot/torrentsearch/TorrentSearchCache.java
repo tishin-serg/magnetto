@@ -67,6 +67,14 @@ public class TorrentSearchCache {
         return Optional.of(searchEntry);
     }
 
+    public List<TorrentSearchResult> alternativesFor(String selectionId) {
+        cleanupExpired();
+        return searches.values().stream()
+                .filter(entry -> entry.results().stream().anyMatch(result -> selectionId.equals(result.selectionId())))
+                .map(SearchEntry::results)
+                .findFirst().orElse(List.of());
+    }
+
     private void cleanupExpired() {
         Instant now = Instant.now();
         entries.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));

@@ -27,6 +27,8 @@ public class DownloadJob {
     private boolean deleteAfterUpload;
     private int lastReportedProgressPercent;
     private Long statusMessageId;
+    private long minDownloadSpeedBytesPerSecond;
+    private boolean autoReplaceSlowDownload;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime completedAt;

@@ -171,7 +171,8 @@ class UxFlowsTest {
         var handler = new DownloadTargetSelectionCallbackHandler(cache, jobs, messages, s3, diskSpace, mock(FileSizeFormatter.class));
         handler.handle("q", 42L, 100L, "target:select:" + id + ":HOME_PC");
         handler.handle("q2", 42L, 100L, "target:select:" + id + ":HOME_PC");
-        verify(jobs, times(1)).startDownload(42L, "magnet:test", 10, DownloadTarget.HOME_PC, "Movie");
+        verify(jobs, times(1)).startDownload(eq(42L), eq("magnet:test"), eq(10L), eq(DownloadTarget.HOME_PC),
+                eq("Movie"), isNull(), anyList());
     }
 
     @Test void targetCancelPreventsOldDownloadButton() {

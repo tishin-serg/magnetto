@@ -6,6 +6,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.List;
+import ru.xataaa.torrentbot.torrentsearch.TorrentSearchResult;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,9 +18,14 @@ public class DownloadTargetSelectionCache {
     private final ConcurrentMap<String, PendingDownload> pendingDownloads = new ConcurrentHashMap<>();
 
     public String put(Long chatId, String magnetUrl, long expectedSizeBytes, String title) {
+        return put(chatId, magnetUrl, expectedSizeBytes, title, List.of());
+    }
+
+    public String put(Long chatId, String magnetUrl, long expectedSizeBytes, String title, List<TorrentSearchResult> alternatives) {
         cleanupExpired();
         String selectionId = UUID.randomUUID().toString();
-        pendingDownloads.put(selectionId, new PendingDownload(chatId, magnetUrl, expectedSizeBytes, title, Instant.now().plus(TTL)));
+        pendingDownloads.put(selectionId, new PendingDownload(chatId, magnetUrl, expectedSizeBytes, title,
+                alternatives == null ? List.of() : List.copyOf(alternatives), Instant.now().plus(TTL)));
         return selectionId;
     }
 
@@ -45,6 +52,7 @@ public class DownloadTargetSelectionCache {
         pendingDownloads.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
     }
 
-    public record PendingDownload(Long chatId, String magnetUrl, long expectedSizeBytes, String title, Instant expiresAt) {
+    public record PendingDownload(Long chatId, String magnetUrl, long expectedSizeBytes, String title,
+                                  List<TorrentSearchResult> alternatives, Instant expiresAt) {
     }
 }

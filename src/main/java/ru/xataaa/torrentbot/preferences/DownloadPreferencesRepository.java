@@ -13,16 +13,20 @@ public class DownloadPreferencesRepository {
     public DownloadPreferences find(long chatId) {
         return jdbc.query("select * from download_preferences where chat_id = ?", (rs, row) ->
                 new DownloadPreferences(rs.getLong("min_bytes"), rs.getLong("max_bytes"),
-                        rs.getInt("min_seeders"), DownloadTarget.valueOf(rs.getString("target"))), chatId)
+                        rs.getInt("min_seeders"), DownloadTarget.valueOf(rs.getString("target")),
+                        rs.getLong("min_download_speed_bps"), rs.getBoolean("auto_replace_slow_download")), chatId)
                 .stream().findFirst().orElseGet(DownloadPreferences::defaults);
     }
 
     public void save(long chatId, DownloadPreferences preferences) {
         jdbc.update("""
-                insert into download_preferences(chat_id,min_bytes,max_bytes,min_seeders,target)
-                values (?,?,?,?,?) on conflict(chat_id) do update set
+                insert into download_preferences(chat_id,min_bytes,max_bytes,min_seeders,target,min_download_speed_bps,auto_replace_slow_download)
+                values (?,?,?,?,?,?,?) on conflict(chat_id) do update set
                 min_bytes=excluded.min_bytes,max_bytes=excluded.max_bytes,
-                min_seeders=excluded.min_seeders,target=excluded.target
-                """, chatId, preferences.minBytes(), preferences.maxBytes(), preferences.minSeeders(), preferences.target().name());
+                min_seeders=excluded.min_seeders,target=excluded.target,
+                min_download_speed_bps=excluded.min_download_speed_bps,
+                auto_replace_slow_download=excluded.auto_replace_slow_download
+                """, chatId, preferences.minBytes(), preferences.maxBytes(), preferences.minSeeders(), preferences.target().name(),
+                preferences.minDownloadSpeedBytesPerSecond(), preferences.autoReplaceSlowDownload());
     }
 }

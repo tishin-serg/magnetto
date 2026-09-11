@@ -66,7 +66,8 @@ public class DownloadTargetSelectionCallbackHandler implements TelegramCallbackH
         }
         telegramMessageService.answerCallbackQuery(callbackQueryId, "Запускаю загрузку");
         telegramMessageService.editText(chatId, messageId, "Выбрано: " + targetLabel(downloadTarget) + ". Создаю задачу...", null);
-        downloadJobService.startDownload(chatId, pendingDownload.magnetUrl(), pendingDownload.expectedSizeBytes(), downloadTarget, pendingDownload.title());
+        downloadJobService.startDownload(chatId, pendingDownload.magnetUrl(), pendingDownload.expectedSizeBytes(), downloadTarget,
+                pendingDownload.title(), null, pendingDownload.alternatives());
     }
 
     private String targetLabel(DownloadTarget downloadTarget) {
