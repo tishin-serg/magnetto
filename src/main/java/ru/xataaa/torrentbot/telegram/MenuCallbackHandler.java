@@ -299,10 +299,12 @@ public class MenuCallbackHandler implements TelegramCallbackHandler {
 
     public String diskSpaceText() {
         DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo();
-        return "Место на сервере:\n\n"
-                + "Свободно: " + fileSizeFormatter.format(diskSpaceInfo.usableBytes()) + "\n"
-                + "Всего: " + fileSizeFormatter.format(diskSpaceInfo.totalBytes()) + "\n\n"
-                + "Если размер выбранной раздачи больше свободного места, я не начну скачивание на VPS.";
+        StringBuilder text = new StringBuilder("Место на сервере:\n\n")
+                .append("Свободно: ").append(fileSizeFormatter.format(diskSpaceInfo.usableBytes())).append("\n");
+        if (diskSpaceInfo.totalBytes() >= 0) {
+            text.append("Всего: ").append(fileSizeFormatter.format(diskSpaceInfo.totalBytes())).append("\n");
+        }
+        return text.append("\nЕсли размер выбранной раздачи больше свободного места, я не начну скачивание на VPS.").toString();
     }
 
     private String homeWebdavUrl() {

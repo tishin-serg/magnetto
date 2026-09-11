@@ -2,6 +2,8 @@ package ru.xataaa.torrentbot.telegram;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import ru.xataaa.torrentbot.common.DiskSpaceService;
+import ru.xataaa.torrentbot.common.FileSizeFormatter;
 import ru.xataaa.torrentbot.job.DownloadJobService;
 import ru.xataaa.torrentbot.job.DownloadTarget;
 import ru.xataaa.torrentbot.media.S3MediaLibraryService;
@@ -16,6 +18,8 @@ public class DownloadTargetSelectionCallbackHandler implements TelegramCallbackH
     private final DownloadJobService downloadJobService;
     private final TelegramMessageService telegramMessageService;
     private final S3MediaLibraryService s3MediaLibraryService;
+    private final DiskSpaceService diskSpaceService;
+    private final FileSizeFormatter fileSizeFormatter;
 
     @Override
     public boolean supports(String data) {
@@ -53,6 +57,9 @@ public class DownloadTargetSelectionCallbackHandler implements TelegramCallbackH
                     DownloadTargetSelectionService.keyboard(selectionId));
             return;
         }
+        if (!hasEnoughSpace(callbackQueryId, chatId, messageId, selectionId, pendingDownload, downloadTarget)) {
+            return;
+        }
         if (!downloadTargetSelectionCache.consume(selectionId, pendingDownload)) {
             telegramMessageService.answerCallbackQuery(callbackQueryId, "Заявка уже обработана. Проверь загрузки.");
             return;
@@ -72,5 +79,32 @@ public class DownloadTargetSelectionCallbackHandler implements TelegramCallbackH
 
     private boolean isS3Ready() {
         return s3MediaLibraryService.isEnabled() && s3MediaLibraryService.isConfigured();
+    }
+
+    private boolean hasEnoughSpace(String callbackQueryId, Long chatId, Long messageId, String selectionId,
+            DownloadTargetSelectionCache.PendingDownload pendingDownload, DownloadTarget downloadTarget) {
+        if (downloadTarget.isS3() || pendingDownload.expectedSizeBytes() <= 0) {
+            return true;
+        }
+        try {
+            DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo(downloadTarget);
+            if (diskSpaceInfo.usableBytes() >= pendingDownload.expectedSizeBytes()) {
+                return true;
+            }
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Недостаточно свободного места");
+            telegramMessageService.editText(chatId, messageId,
+                    "Не начинаю скачивание: файл больше свободного места в выбранной медиатеке.\n\n"
+                            + "Размер файла: " + fileSizeFormatter.format(pendingDownload.expectedSizeBytes()) + "\n"
+                            + "Свободно: " + fileSizeFormatter.format(diskSpaceInfo.usableBytes()) + "\n\n"
+                            + "Освободи место, выбери другую медиатеку или раздачу меньшего размера.",
+                    DownloadTargetSelectionService.keyboard(selectionId));
+            return false;
+        } catch (RuntimeException exception) {
+            telegramMessageService.answerCallbackQuery(callbackQueryId, "Не удалось проверить свободное место");
+            telegramMessageService.editText(chatId, messageId,
+                    "Не начинаю скачивание: не удалось проверить свободное место в выбранной медиатеке. Попробуй ещё раз.",
+                    DownloadTargetSelectionService.keyboard(selectionId));
+            return false;
+        }
     }
 }

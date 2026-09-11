@@ -18,6 +18,7 @@ import ru.xataaa.torrentbot.config.WebClientConfig;
 import ru.xataaa.torrentbot.job.DownloadTarget;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTorrentFile;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTorrentInfo;
+import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTransferInfo;
 import ru.xataaa.torrentbot.retry.RetryableOperationException;
 
 @Slf4j
@@ -91,6 +92,17 @@ public class QbittorrentClient {
                 .onErrorMap(throwable -> mapQbittorrentError(downloadTarget, throwable))
                 .block(Duration.ofMillis(targetProperties.requestTimeoutMs()));
         return files == null ? List.of() : files;
+    }
+
+    public QbittorrentTransferInfo getTransferInfo(DownloadTarget downloadTarget) {
+        QbittorrentProperties.TargetProperties targetProperties = qbittorrentProperties.target(downloadTarget);
+        return webClient(downloadTarget).get()
+                .uri("/api/v2/transfer/info")
+                .header(HttpHeaders.COOKIE, qbittorrentAuthService.getSessionCookie(downloadTarget))
+                .retrieve()
+                .bodyToMono(QbittorrentTransferInfo.class)
+                .onErrorMap(throwable -> mapQbittorrentError(downloadTarget, throwable))
+                .block(Duration.ofMillis(targetProperties.requestTimeoutMs()));
     }
 
     public void deleteTorrent(String hash, boolean deleteFiles) {

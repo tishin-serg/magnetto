@@ -137,7 +137,7 @@ public class DownloadOrchestrator {
     private void handleAddingToQbittorrent(DownloadJob downloadJob) {
         DownloadTarget downloadTarget = downloadTarget(downloadJob);
         log.info("Adding magnet to qBittorrent: jobId={}, chatId={}, downloadTarget={}", downloadJob.getId(), downloadJob.getChatId(), downloadTarget);
-        if (sizeGuard != null && sizeGuard.applies(downloadJob.getId()))
+        if ((sizeGuard != null && sizeGuard.applies(downloadJob.getId())) || requiresDiskSpaceCheck(downloadTarget))
             qbittorrentTorrentService.addMagnet(downloadTarget, downloadJob.getId(), downloadJob.getMagnetUrl(), true);
         else qbittorrentTorrentService.addMagnet(downloadTarget, downloadJob.getId(), downloadJob.getMagnetUrl());
         Optional<QbittorrentTorrentInfo> torrentInfo = qbittorrentTorrentService.getTorrentInfoByJobTag(downloadTarget, downloadJob.getId());
@@ -180,11 +180,15 @@ public class DownloadOrchestrator {
             changeStatus(downloadJob, DownloadJobStatus.WAITING_FILE_SELECTION);
             return;
         }
-        if (usesVpsStorage(downloadJob)) {
+        if (requiresDiskSpaceCheck(downloadTarget(downloadJob))) {
             failIfNotEnoughDiskSpace(downloadJob, requiredBytesForReadyFiles(downloadJob.getId()));
         }
         prepareTorrentFilePriorities(downloadJob.getId(), info.getHash());
-        if (sizeGuard != null) sizeGuard.resumeValidated(downloadJob, info.getHash());
+        if (sizeGuard != null && sizeGuard.applies(downloadJob.getId())) {
+            sizeGuard.resumeValidated(downloadJob, info.getHash());
+        } else if (requiresDiskSpaceCheck(downloadTarget(downloadJob))) {
+            qbittorrentTorrentService.resumeTorrent(downloadTarget(downloadJob), info.getHash());
+        }
         changeStatus(downloadJob, DownloadJobStatus.DOWNLOADING);
     }
 
@@ -427,11 +431,9 @@ public class DownloadOrchestrator {
         if (!finishTime.isBlank()) {
             text.append("Примерно закончит: ").append(finishTime).append("\n");
         }
-        if (usesVpsStorage(downloadJob)) {
-            DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo();
-            text.append("Свободно на сервере: ").append(fileSizeFormatter.format(diskSpaceInfo.usableBytes()));
-        } else if (downloadTarget(downloadJob) == DownloadTarget.HOME_PC) {
-            text.append("Файл пишется сразу на домашний компьютер.");
+        if (requiresDiskSpaceCheck(downloadTarget(downloadJob))) {
+            DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo(downloadTarget(downloadJob));
+            text.append("Свободно в выбранной медиатеке: ").append(fileSizeFormatter.format(diskSpaceInfo.usableBytes()));
         } else {
             text.append("Сначала качаю на VPS, после завершения выгружу в S3.");
         }
@@ -652,7 +654,7 @@ public class DownloadOrchestrator {
     }
 
     private void failIfNotEnoughDiskSpace(DownloadJob downloadJob, QbittorrentTorrentInfo info) {
-        if (!usesVpsStorage(downloadJob)) {
+        if (!requiresDiskSpaceCheck(downloadTarget(downloadJob))) {
             return;
         }
         long bytesRequired = info.getAmountLeft() > 0 ? info.getAmountLeft() : info.getTotalSize();
@@ -660,11 +662,15 @@ public class DownloadOrchestrator {
     }
 
     private void failIfNotEnoughDiskSpace(DownloadJob downloadJob, long bytesRequired) {
-        if (bytesRequired <= 0 || diskSpaceService.hasEnoughSpace(bytesRequired)) {
+        DownloadTarget downloadTarget = downloadTarget(downloadJob);
+        if (!requiresDiskSpaceCheck(downloadTarget)) {
             return;
         }
-        DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo();
-        String message = "Не могу продолжить скачивание: на сервере мало свободного места.\n\n"
+        if (bytesRequired <= 0 || diskSpaceService.hasEnoughSpace(downloadTarget, bytesRequired)) {
+            return;
+        }
+        DiskSpaceService.DiskSpaceInfo diskSpaceInfo = diskSpaceService.downloadStorageInfo(downloadTarget);
+        String message = "Не могу продолжить скачивание: в выбранной медиатеке мало свободного места.\n\n"
                 + "Нужно примерно: " + fileSizeFormatter.format(bytesRequired) + "\n"
                 + "Свободно: " + fileSizeFormatter.format(diskSpaceInfo.usableBytes()) + "\n\n"
                 + "Очисти медиатеку или выбери раздачу меньшего размера.";
@@ -732,9 +738,8 @@ public class DownloadOrchestrator {
                 : DownloadJobStatus.UPLOADING_TO_TELEGRAM;
     }
 
-    private boolean usesVpsStorage(DownloadJob downloadJob) {
-        DownloadTarget target = downloadTarget(downloadJob);
-        return target == DownloadTarget.VPS || target.isS3();
+    private boolean requiresDiskSpaceCheck(DownloadTarget target) {
+        return target == DownloadTarget.VPS || target == DownloadTarget.HOME_PC;
     }
 
     private boolean shouldDeleteLocalAfterDelivery(DownloadJob downloadJob) {
