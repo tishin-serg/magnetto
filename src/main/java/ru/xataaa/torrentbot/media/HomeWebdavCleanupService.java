@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 import java.net.URLEncoder;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -70,7 +71,9 @@ public class HomeWebdavCleanupService {
 
     private void deleteHref(String href) {
         webClient().delete()
-                .uri(href)
+                // The path is already percent-encoded. Passing it as a String makes
+                // WebClient encode '%' once more (e.g. %20 -> %2520).
+                .uri(URI.create(homeWebdavProperties.baseUrl()).resolve(href.replace(" ", "%20")))
                 .header(HttpHeaders.AUTHORIZATION, authorizationHeader())
                 .retrieve()
                 .toBodilessEntity()
