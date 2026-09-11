@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import ru.xataaa.torrentbot.common.DiskSpaceService;
 import ru.xataaa.torrentbot.common.FileSizeFormatter;
@@ -97,6 +98,6 @@ class DownloadTargetSelectionCallbackHandlerTest {
         verifyNoInteractions(diskSpaceService);
         verify(downloadJobService).startDownload(42L,
                 "magnet:?xt=urn:btih:0123456789012345678901234567890123456789",
-                200L, DownloadTarget.S3, "Movie");
+                200L, DownloadTarget.S3, "Movie", null, List.of());
     }
 }
