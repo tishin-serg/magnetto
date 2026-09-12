@@ -9,7 +9,7 @@ import ru.xataaa.torrentbot.config.QbittorrentProperties;
 import ru.xataaa.torrentbot.job.DownloadTarget;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTorrentFile;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTorrentInfo;
-import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTransferInfo;
+import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentMainData;
 import ru.xataaa.torrentbot.retry.RetryExecutor;
 
 @Service
@@ -69,13 +69,15 @@ public class QbittorrentTorrentService {
     }
 
     public long getFreeDiskSpace(DownloadTarget downloadTarget) {
-        QbittorrentTransferInfo transferInfo = retryExecutor.execute(
-                "qbittorrent.getTransferInfo." + downloadTarget.name().toLowerCase(),
-                () -> qbittorrentClient.getTransferInfo(downloadTarget));
-        if (transferInfo == null || transferInfo.getFreeSpaceOnDisk() == null || transferInfo.getFreeSpaceOnDisk() < 0) {
+        QbittorrentMainData mainData = retryExecutor.execute(
+                "qbittorrent.getMainData." + downloadTarget.name().toLowerCase(),
+                () -> qbittorrentClient.getMainData(downloadTarget));
+        Long freeSpaceOnDisk = mainData == null || mainData.getServerState() == null
+                ? null : mainData.getServerState().getFreeSpaceOnDisk();
+        if (freeSpaceOnDisk == null || freeSpaceOnDisk < 0) {
             throw new IllegalStateException("qBittorrent did not report free disk space for " + downloadTarget);
         }
-        return transferInfo.getFreeSpaceOnDisk();
+        return freeSpaceOnDisk;
     }
 
     public void deleteTorrent(String hash, boolean deleteFiles) {

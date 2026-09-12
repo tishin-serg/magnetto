@@ -19,6 +19,7 @@ import ru.xataaa.torrentbot.job.DownloadTarget;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTorrentFile;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTorrentInfo;
 import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentTransferInfo;
+import ru.xataaa.torrentbot.qbittorrent.dto.QbittorrentMainData;
 import ru.xataaa.torrentbot.retry.RetryableOperationException;
 
 @Slf4j
@@ -101,6 +102,17 @@ public class QbittorrentClient {
                 .header(HttpHeaders.COOKIE, qbittorrentAuthService.getSessionCookie(downloadTarget))
                 .retrieve()
                 .bodyToMono(QbittorrentTransferInfo.class)
+                .onErrorMap(throwable -> mapQbittorrentError(downloadTarget, throwable))
+                .block(Duration.ofMillis(targetProperties.requestTimeoutMs()));
+    }
+
+    public QbittorrentMainData getMainData(DownloadTarget downloadTarget) {
+        QbittorrentProperties.TargetProperties targetProperties = qbittorrentProperties.target(downloadTarget);
+        return webClient(downloadTarget).get()
+                .uri(uriBuilder -> uriBuilder.path("/api/v2/sync/maindata").queryParam("rid", 0).build())
+                .header(HttpHeaders.COOKIE, qbittorrentAuthService.getSessionCookie(downloadTarget))
+                .retrieve()
+                .bodyToMono(QbittorrentMainData.class)
                 .onErrorMap(throwable -> mapQbittorrentError(downloadTarget, throwable))
                 .block(Duration.ofMillis(targetProperties.requestTimeoutMs()));
     }
