@@ -13,5 +13,7 @@ public class ShortcutApiExceptionHandler {
     ResponseEntity<ProblemDetail> expired(Exception e){return problem(HttpStatus.GONE,e.getMessage());}
     @ExceptionHandler(DownloadApplicationService.NoAutomaticTorrentException.class)
     ResponseEntity<ProblemDetail> noTorrent(Exception e){return problem(HttpStatus.UNPROCESSABLE_ENTITY,e.getMessage());}
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<ProblemDetail> invalid(IllegalArgumentException e){return problem(HttpStatus.BAD_REQUEST,e.getMessage());}
     private ResponseEntity<ProblemDetail> problem(HttpStatus s,String d){return ResponseEntity.status(s).contentType(MediaType.valueOf("application/problem+json")).body(ProblemDetail.forStatusAndDetail(s,d));}
 }
