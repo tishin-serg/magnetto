@@ -31,26 +31,29 @@ public class DownloadApplicationService {
 
     public UUID create(Long chatId, String movieSelectionId, String torrentSelectionId, Integer season,
                        Set<Integer> episodes, String quality, String voice, DeliveryTarget deliveryTarget,
-                       boolean automatic) {
+                       boolean automatic, ShortcutPreferences shortcutPreferences) {
         MovieMetadata movie = movies.findBySelectionId(movieSelectionId).orElseThrow(() -> new SelectionExpiredException("selectionId expired"));
-        TorrentSearchFilters filters = new TorrentSearchFilters(TorrentQuality.fromCode(quality), VoiceFilter.fromCode(voice), season, episodes);
+        ShortcutPreferences profile = shortcutPreferences == null ? ShortcutPreferences.defaults() : shortcutPreferences;
+        String effectiveQuality = quality == null || quality.isBlank() ? profile.quality() : quality;
+        String effectiveVoice = voice == null || voice.isBlank() ? profile.voice() : voice;
+        TorrentSearchFilters filters = new TorrentSearchFilters(TorrentQuality.fromCode(effectiveQuality), VoiceFilter.fromCode(effectiveVoice), season, episodes);
         List<TorrentSearchResult> results = torrents.search(movie, filters);
         TorrentSearchResult selected = torrentSelectionId == null || torrentSelectionId.isBlank()
-                ? results.stream().filter(r -> accepts(r, quality, voice)).findFirst().orElseThrow(() -> new NoAutomaticTorrentException("No suitable torrent"))
+                ? results.stream().filter(r -> accepts(r, profile)).filter(r -> r.sizeBytes() >= profile.minBytes() && r.sizeBytes() <= profile.maxBytes() && r.seeders() >= profile.minSeeders()).findFirst().orElseThrow(() -> new NoAutomaticTorrentException("No suitable torrent"))
                 : selectionCache.find(torrentSelectionId).orElseThrow(() -> new SelectionExpiredException("selectionId expired"));
         DownloadTarget target = switch (deliveryTarget) {
             case HOME_LIBRARY -> DownloadTarget.HOME_PC;
             case S3_LIBRARY, PHONE_S3_TEMP -> DownloadTarget.S3;
             case TELEGRAM_OR_WEBDAV, PHONE_VPS_TEMP -> DownloadTarget.VPS;
         };
-        DownloadPreferences preferences = new DownloadPreferences(0, Long.MAX_VALUE, 1, target);
+        DownloadPreferences preferences = new DownloadPreferences(profile.minBytes(), profile.maxBytes(), profile.minSeeders(), target, profile.minSpeedBytesPerSecond(), profile.autoReplaceSlowDownload());
         return jobs.startDownload(UUID.randomUUID(), chatId, selected.magnetUri(), selected.sizeBytes(), target,
                 selected.title(), preferences, results);
     }
 
-    private boolean accepts(TorrentSearchResult result, String quality, String voice) {
-        return result.sizeBytes() > 0 && TorrentQuality.fromCode(quality).matches(result.title())
-                && VoiceFilter.fromCode(voice).matches(result.title());
+    private boolean accepts(TorrentSearchResult result, ShortcutPreferences profile) {
+        return result.sizeBytes() > 0 && TorrentQuality.fromCode(profile.quality()).matches(result.title())
+                && VoiceFilter.fromCode(profile.voice()).matches(result.title());
     }
 
     public static class SelectionExpiredException extends RuntimeException { public SelectionExpiredException(String m) { super(m); } }

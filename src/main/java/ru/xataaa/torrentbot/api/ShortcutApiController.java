@@ -44,13 +44,13 @@ public class ShortcutApiController {
         String idKey = properties.userId() + ":" + key;
         UUID known = idempotency.get(idKey); if (known != null) return ResponseEntity.accepted().body(new JobAccepted(known));
         DeliveryTarget target = request.deliveryTarget() == null ? DeliveryTarget.PHONE_VPS_TEMP : request.deliveryTarget();
-        UUID id = application.create(properties.telegramChatId() == null ? 0L : properties.telegramChatId(), request.movieSelectionId(), request.torrentSelectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice(), target, request.automatic());
+        UUID id = application.create(properties.telegramChatId() == null ? 0L : properties.telegramChatId(), request.movieSelectionId(), request.torrentSelectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice(), target, request.automatic(), preferencesRepository.find(properties.userId()));
         idempotency.put(idKey, id); return ResponseEntity.status(HttpStatus.ACCEPTED).body(new JobAccepted(id));
     }
     @GetMapping("/downloads")
-    public List<JobView> list(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth) { authenticate(auth); return query.recent(chat(), 50).stream().map(j -> view(j, query.files(j.getId()))).toList(); }
+    public List<JobView> list(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth) { authenticate(auth); return query.recent(chat(), 50).stream().map(j -> view(j, query.files(j.getId()), query.readyLinks(j.getId()))).toList(); }
     @GetMapping("/downloads/{id}")
-    public ResponseEntity<?> get(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @PathVariable UUID id) { authenticate(auth); DownloadJob j = query.owned(id, chat()); return j == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(view(j, query.files(id))); }
+    public ResponseEntity<?> get(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @PathVariable UUID id) { authenticate(auth); DownloadJob j = query.owned(id, chat()); return j == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(view(j, query.files(id), query.readyLinks(id))); }
     @PostMapping("/downloads/{id}/pause") public ResponseEntity<?> pause(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.pause(j); return ResponseEntity.accepted().build(); }
     @PostMapping("/downloads/{id}/resume") public ResponseEntity<?> resume(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.resume(j); return ResponseEntity.accepted().build(); }
     @PutMapping("/downloads/{id}/files") public ResponseEntity<?> files(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id,@RequestBody FileSelection body){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.select(j,body.fileIds()); return ResponseEntity.accepted().build(); }
@@ -64,7 +64,7 @@ public class ShortcutApiController {
     private void checkCreationRate(){ limit("creations",properties.creationsPerMinute()); }
     private void limit(String kind,int max){ String k=properties.userId()+":"+kind; Window w=windows.compute(k,(x,old)->old==null||old.started.plusSeconds(60).isBefore(Instant.now())?new Window(Instant.now(),1):new Window(old.started,old.count+1)); if(w.count>max)throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"Rate limit exceeded"); }
     private String sha256(String s){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
-    private JobView view(DownloadJob j,List<DownloadFile> fs){return new JobView(j.getId(),j.getStatus().name(),j.getLastReportedProgressPercent(),j.getErrorMessage(),fs.stream().map(f->new FileView(f.getId(),f.getFileName(),f.getSizeBytes(),f.getStatus().name())).toList());}
+    private JobView view(DownloadJob j,List<DownloadFile> fs,List<String> links){return new JobView(j.getId(),j.getStatus().name(),j.getLastReportedProgressPercent(),j.getErrorMessage(),links,fs.stream().map(f->new FileView(f.getId(),f.getFileName(),f.getSizeBytes(),f.getStatus().name())).toList());}
     private static Set<Integer> safe(Set<Integer> v){return v==null?Set.of():v;}
     private record Window(Instant started,int count){}
     public record CatalogRequest(String query){} public record TorrentRequest(String selectionId,Integer season,Set<Integer> episodes,String quality,String voice){}
@@ -73,6 +73,6 @@ public class ShortcutApiController {
     public record JobAccepted(UUID jobId){}
     public record CatalogItem(String selectionId,String tmdbId,String type,String title,Integer year,Double rating){static CatalogItem from(MovieMetadata m){return new CatalogItem(m.selectionId(),m.tmdbId(),m.mediaType().name(),m.title(),m.year(),m.rating());}}
     public record TorrentItem(String selectionId,String title,long sizeBytes,int seeders){static TorrentItem from(TorrentSearchResult r){return new TorrentItem(r.selectionId(),r.title(),r.sizeBytes(),r.seeders());}}
-    public record JobView(UUID jobId,String status,int progress,String error,List<FileView> files){} public record FileView(UUID fileId,String name,long sizeBytes,String status){}
+    public record JobView(UUID jobId,String status,int progress,String error,List<String> links,List<FileView> files){} public record FileView(UUID fileId,String name,long sizeBytes,String status){}
     public static class ApiException extends RuntimeException { final HttpStatus status; ApiException(HttpStatus s,String m){super(m);status=s;} }
 }
