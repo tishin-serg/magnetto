@@ -29,7 +29,7 @@ public class DownloadApplicationService {
         return torrents.search(movie, filters);
     }
 
-    public UUID create(Long chatId, String movieSelectionId, String torrentSelectionId, Integer season,
+    public UUID create(UUID userId, Long chatId, String movieSelectionId, String torrentSelectionId, Integer season,
                        Set<Integer> episodes, String quality, String voice, DeliveryTarget deliveryTarget,
                        boolean automatic, ShortcutPreferences shortcutPreferences) {
         MovieMetadata movie = movies.findBySelectionId(movieSelectionId).orElseThrow(() -> new SelectionExpiredException("selectionId expired"));
@@ -46,9 +46,11 @@ public class DownloadApplicationService {
             case S3_LIBRARY, PHONE_S3_TEMP -> DownloadTarget.S3;
             case TELEGRAM_OR_WEBDAV, PHONE_VPS_TEMP -> DownloadTarget.VPS;
         };
+        ExecutionTarget executionTarget = target == DownloadTarget.HOME_PC ? ExecutionTarget.HOME_PC : ExecutionTarget.VPS;
         DownloadPreferences preferences = new DownloadPreferences(profile.minBytes(), profile.maxBytes(), profile.minSeeders(), target, profile.minSpeedBytesPerSecond(), profile.autoReplaceSlowDownload());
         return jobs.startDownload(UUID.randomUUID(), chatId, selected.magnetUri(), selected.sizeBytes(), target,
-                selected.title(), preferences, results);
+                selected.title(), preferences, results, userId, executionTarget, deliveryTarget, season,
+                episodes == null || episodes.isEmpty() ? null : episodes.stream().sorted().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
     }
 
     private boolean accepts(TorrentSearchResult result, ShortcutPreferences profile) {

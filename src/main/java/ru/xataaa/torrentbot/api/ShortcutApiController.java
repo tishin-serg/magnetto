@@ -44,7 +44,8 @@ public class ShortcutApiController {
         String idKey = properties.userId() + ":" + key;
         UUID known = idempotency.get(idKey); if (known != null) return ResponseEntity.accepted().body(new JobAccepted(known));
         DeliveryTarget target = request.deliveryTarget() == null ? DeliveryTarget.PHONE_VPS_TEMP : request.deliveryTarget();
-        UUID id = application.create(properties.telegramChatId() == null ? 0L : properties.telegramChatId(), request.movieSelectionId(), request.torrentSelectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice(), target, request.automatic(), preferencesRepository.find(properties.userId()));
+        preferencesRepository.ensureUser(properties.userId(), properties.telegramChatId());
+        UUID id = application.create(properties.userId(), properties.telegramChatId() == null ? 0L : properties.telegramChatId(), request.movieSelectionId(), request.torrentSelectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice(), target, request.automatic(), preferencesRepository.find(properties.userId()));
         idempotency.put(idKey, id); return ResponseEntity.status(HttpStatus.ACCEPTED).body(new JobAccepted(id));
     }
     @GetMapping("/downloads")

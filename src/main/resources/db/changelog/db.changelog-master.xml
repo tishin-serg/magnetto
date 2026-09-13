@@ -324,6 +324,9 @@
             ALTER TABLE download_job ADD COLUMN delivery_target VARCHAR(64) NOT NULL DEFAULT 'TELEGRAM_OR_WEBDAV';
             ALTER TABLE download_job ADD COLUMN season_number INT;
             ALTER TABLE download_job ADD COLUMN episode_numbers TEXT;
+            UPDATE download_job SET execution_target = CASE WHEN download_target = 'HOME_PC' THEN 'HOME_PC' ELSE 'VPS' END,
+                delivery_target = CASE WHEN download_target = 'HOME_PC' THEN 'HOME_LIBRARY'
+                    WHEN download_target IN ('S3','S3_LATER') THEN 'S3_LIBRARY' ELSE 'TELEGRAM_OR_WEBDAV' END;
             CREATE TABLE shortcut_preferences (
                 user_id UUID PRIMARY KEY REFERENCES app_user(id), min_bytes BIGINT NOT NULL,
                 max_bytes BIGINT NOT NULL, min_seeders INT NOT NULL, quality VARCHAR(32) NOT NULL,

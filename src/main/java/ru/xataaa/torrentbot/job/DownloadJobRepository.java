@@ -26,4 +26,7 @@ public interface DownloadJobRepository {
     void updateStatusMessageId(UUID jobId, Long messageId);
     void markCompleted(UUID jobId, LocalDateTime completedAt);
     void markFailed(UUID jobId, ErrorCode errorCode, String errorMessage, LocalDateTime failedAt);
+    default void updateApplicationContext(UUID jobId, UUID userId, String executionTarget, String deliveryTarget,
+                                          Integer seasonNumber, String episodeNumbers) {
+    }
 }
