@@ -1,10 +1,11 @@
 package ru.xataaa.torrentbot.media;
 
+import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Base64;
-import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -70,7 +71,10 @@ public class HomeWebdavCleanupService {
 
     private void deleteHref(String href) {
         webClient().delete()
-                .uri(href)
+                // href is already percent-encoded. Passing it as a String lets
+                // WebClient treat '%' as a literal and encode it again (%25).
+                // Resolve an URI instead, as the media-library reader does.
+                .uri(URI.create(homeWebdavProperties.baseUrl()).resolve(href))
                 .header(HttpHeaders.AUTHORIZATION, authorizationHeader())
                 .retrieve()
                 .toBodilessEntity()
