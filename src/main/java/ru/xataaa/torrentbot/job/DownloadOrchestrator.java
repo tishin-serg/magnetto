@@ -220,7 +220,8 @@ public class DownloadOrchestrator {
     }
 
     private void handleUploading(DownloadJob downloadJob) {
-        FileDeliveryService.DeliveryResult deliveryResult = fileDeliveryService.deliverFiles(downloadJob.getId(), downloadJob.getChatId());
+        FileDeliveryService.DeliveryResult deliveryResult = fileDeliveryService.deliverFiles(downloadJob.getId(), downloadJob.getChatId(),
+                downloadJob.getDeliveryTarget() == ru.xataaa.torrentbot.application.DeliveryTarget.PHONE_VPS_TEMP);
         if (deliveryResult.hasFinalFailure()) {
             failFinally(downloadJob, ErrorCode.TELEGRAM_UPLOAD_FAILED, "One or more files failed permanently");
             return;
@@ -234,7 +235,8 @@ public class DownloadOrchestrator {
     }
 
     private void handleUploadingToS3(DownloadJob downloadJob) {
-        S3DeliveryService.DeliveryResult deliveryResult = s3DeliveryService.deliverFiles(downloadJob.getId(), downloadJob.getChatId());
+        boolean temporary = downloadJob.getDeliveryTarget() == ru.xataaa.torrentbot.application.DeliveryTarget.PHONE_S3_TEMP;
+        S3DeliveryService.DeliveryResult deliveryResult = s3DeliveryService.deliverFiles(downloadJob.getId(), downloadJob.getChatId(), temporary);
         if (deliveryResult.hasFinalFailure()) {
             failFinally(downloadJob, ErrorCode.S3_UPLOAD_FAILED, "One or more files failed permanently during S3 upload");
             return;

@@ -66,14 +66,25 @@ public class S3MediaLibraryService {
     }
 
     public S3UploadResult upload(Path sourcePath, String originalFileName, String existingObjectKey, long expectedSizeBytes) {
+        return upload(sourcePath, originalFileName, existingObjectKey, expectedSizeBytes, properties.prefix());
+    }
+
+    public S3UploadResult uploadTemporary(Path sourcePath, String originalFileName, String existingObjectKey,
+                                           long expectedSizeBytes, String temporaryPrefix) {
+        String prefix = normalizePrefix(temporaryPrefix);
+        return upload(sourcePath, originalFileName, existingObjectKey, expectedSizeBytes, prefix);
+    }
+
+    private S3UploadResult upload(Path sourcePath, String originalFileName, String existingObjectKey,
+                                   long expectedSizeBytes, String prefix) {
         assertEnabled();
         if (existingObjectKey != null && !existingObjectKey.isBlank()) {
-            requireSafeObjectKey(existingObjectKey);
+            requireSafeObjectKey(existingObjectKey, prefix);
             if (objectExistsWithSize(existingObjectKey, expectedSizeBytes)) {
                 return new S3UploadResult(existingObjectKey, fileNameFromKey(existingObjectKey), true);
             }
         }
-        String objectKey = uniqueObjectKey(originalFileName, expectedSizeBytes);
+        String objectKey = uniqueObjectKey(originalFileName, expectedSizeBytes, prefix);
         try (S3Client client = s3Client()) {
             client.putObject(
                     PutObjectRequest.builder()
@@ -123,8 +134,16 @@ public class S3MediaLibraryService {
     }
 
     public String createPresignedUrl(String objectKey) {
+        return createPresignedUrl(objectKey, properties.prefix());
+    }
+
+    public String createTemporaryPresignedUrl(String objectKey, String temporaryPrefix) {
+        return createPresignedUrl(objectKey, normalizePrefix(temporaryPrefix));
+    }
+
+    private String createPresignedUrl(String objectKey, String allowedPrefix) {
         assertEnabled();
-        requireSafeObjectKey(objectKey);
+        requireSafeObjectKey(objectKey, allowedPrefix);
         try (S3Presigner presigner = s3Presigner()) {
             GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                     .bucket(properties.bucket())
@@ -207,6 +226,10 @@ public class S3MediaLibraryService {
     }
 
     public void requireSafeObjectKey(String objectKey) {
+        requireSafeObjectKey(objectKey, properties.prefix());
+    }
+
+    private void requireSafeObjectKey(String objectKey, String allowedPrefix) {
         if (objectKey == null || objectKey.isBlank()) {
             throw new NonRetryableOperationException(ErrorCode.UNKNOWN_ERROR, "S3 object key is empty");
         }
@@ -214,23 +237,29 @@ public class S3MediaLibraryService {
         if (!normalized.equals(objectKey)
                 || normalized.contains("..")
                 || normalized.chars().anyMatch(character -> character < 32)
-                || !normalized.startsWith(properties.prefix())
-                || normalized.equals(properties.prefix())) {
+                || !normalized.startsWith(normalizePrefix(allowedPrefix))
+                || normalized.equals(normalizePrefix(allowedPrefix))) {
             throw new NonRetryableOperationException(ErrorCode.UNKNOWN_ERROR, "Unsafe S3 object key");
         }
     }
 
-    private String uniqueObjectKey(String originalFileName, long expectedSizeBytes) {
+    private String uniqueObjectKey(String originalFileName, long expectedSizeBytes, String prefix) {
         String safeFileName = safeFileName(originalFileName);
         String baseName = baseName(safeFileName);
         String extension = extension(safeFileName);
-        String candidate = properties.prefix() + safeFileName;
+        String candidate = prefix + safeFileName;
         int suffix = 1;
         while (objectExistsWithDifferentSize(candidate, expectedSizeBytes)) {
-            candidate = properties.prefix() + baseName + " (" + suffix + ")" + extension;
+            candidate = prefix + baseName + " (" + suffix + ")" + extension;
             suffix++;
         }
         return candidate;
+    }
+
+    private String normalizePrefix(String value) {
+        String normalized = value == null ? "" : value.replace("\\", "/");
+        while (normalized.startsWith("/")) normalized = normalized.substring(1);
+        return normalized.endsWith("/") ? normalized : normalized + "/";
     }
 
     private boolean objectExistsWithDifferentSize(String objectKey, long expectedSizeBytes) {

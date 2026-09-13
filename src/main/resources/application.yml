@@ -114,6 +114,7 @@ shortcut-api:
   public-url: ${SHORTCUT_API_PUBLIC_URL:}
   temporary-ttl-hours: ${SHORTCUT_API_TEMPORARY_TTL_HOURS:24}
   temporary-s3-prefix: ${SHORTCUT_API_TEMPORARY_S3_PREFIX:temporary/}
+  temporary-cleanup-interval-ms: ${SHORTCUT_API_TEMPORARY_CLEANUP_INTERVAL_MS:1800000}
 
 retry:
   max-attempts: ${RETRY_MAX_ATTEMPTS:3}
