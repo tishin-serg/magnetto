@@ -341,4 +341,14 @@
             CREATE INDEX idx_temporary_delivery_cleanup ON temporary_delivery_artifact(cleanup_status, expires_at);
         </sql>
     </changeSet>
+    <changeSet id="013-api-idempotency" author="codex">
+        <createTable tableName="api_idempotency_key">
+            <column name="user_id" type="uuid"><constraints nullable="false" foreignKeyName="fk_api_idempotency_user" references="app_user(id)"/></column>
+            <column name="idempotency_key" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="job_id" type="uuid"><constraints nullable="false" foreignKeyName="fk_api_idempotency_job" references="download_job(id)"/></column>
+            <column name="created_at" type="timestamp"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="api_idempotency_key" columnNames="user_id,idempotency_key" constraintName="pk_api_idempotency_key"/>
+        <createIndex indexName="idx_api_idempotency_created_at" tableName="api_idempotency_key"><column name="created_at"/></createIndex>
+    </changeSet>
 </databaseChangeLog>

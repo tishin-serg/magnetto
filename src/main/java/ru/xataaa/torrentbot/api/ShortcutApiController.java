@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.*;
@@ -26,7 +25,7 @@ public class ShortcutApiController {
     private final DownloadQueryService query;
     private final DownloadControlService control;
     private final ShortcutPreferencesRepository preferencesRepository;
-    private final Map<String, UUID> idempotency = new ConcurrentHashMap<>();
+    private final ApiIdempotencyRepository idempotency;
     private final Map<String, Window> windows = new ConcurrentHashMap<>();
 
     @PostMapping("/catalog/search")
@@ -41,12 +40,14 @@ public class ShortcutApiController {
     public ResponseEntity<?> create(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @RequestHeader(value = "Idempotency-Key", required = false) String key, @RequestBody CreateRequest request) {
         if (key == null || key.isBlank()) throw new ApiException(HttpStatus.BAD_REQUEST, "Idempotency-Key is required");
         authenticate(auth); checkCreationRate();
-        String idKey = properties.userId() + ":" + key;
-        UUID known = idempotency.get(idKey); if (known != null) return ResponseEntity.accepted().body(new JobAccepted(known));
+        UUID known = idempotency.find(properties.userId(), key).orElse(null); if (known != null) return ResponseEntity.accepted().body(new JobAccepted(known));
         DeliveryTarget target = request.deliveryTarget() == null ? DeliveryTarget.PHONE_VPS_TEMP : request.deliveryTarget();
         preferencesRepository.ensureUser(properties.userId(), properties.telegramChatId());
         UUID id = application.create(properties.userId(), properties.telegramChatId() == null ? 0L : properties.telegramChatId(), request.movieSelectionId(), request.torrentSelectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice(), target, request.automatic(), preferencesRepository.find(properties.userId()));
-        idempotency.put(idKey, id); return ResponseEntity.status(HttpStatus.ACCEPTED).body(new JobAccepted(id));
+        if (!idempotency.saveIfAbsent(properties.userId(), key, id)) {
+            return ResponseEntity.accepted().body(new JobAccepted(idempotency.find(properties.userId(), key).orElse(id)));
+        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(new JobAccepted(id));
     }
     @GetMapping("/downloads")
     public List<JobView> list(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth) { authenticate(auth); return query.recent(chat(), 50).stream().map(j -> view(j, query.files(j.getId()), query.readyLinks(j))).toList(); }
