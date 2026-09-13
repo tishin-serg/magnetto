@@ -605,3 +605,17 @@ Telegram API. Логи используют preview/hash поискового з
 | MGB-12 | Первые 15 минут загрузки: порог скорости, три последовательных замера, персистентный монитор, сохранённые альтернативы и ручная/автоматическая замена без удаления данных. Проверка: 162 теста, `mvnw verify`. |
 
 Подробный отчёт проверки MGB-06: [`docs/confirmation-test-report.md`](docs/confirmation-test-report.md).
+
+### iPhone Shortcut API (MGB-16)
+
+API Shortcut выключен по умолчанию (`SHORTCUT_API_ENABLED=false`). После включения
+все `/api/v1/**` требуют `Authorization: Bearer ...`; в конфигурации хранится только
+SHA-256 токена (`SHORTCUT_API_TOKEN_SHA256`). Основные методы: поиск каталога,
+поиск раздач, создание задачи с `Idempotency-Key`, список/статус задач,
+пауза/продолжение, выбор файлов и отдельные настройки Shortcut.
+
+Назначения: `HOME_LIBRARY`, `S3_LIBRARY`, `PHONE_VPS_TEMP`, `PHONE_S3_TEMP`.
+Ограничения по умолчанию — 30 запросов и 5 созданий задач в минуту; временные
+доставки имеют TTL 24 часа и prefix `temporary/`. API использует существующие
+TMDb/JacRed/qBittorrent и Telegram-уведомления, а старые Telegram-настройки не
+изменяет.

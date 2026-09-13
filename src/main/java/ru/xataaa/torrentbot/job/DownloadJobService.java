@@ -70,6 +70,16 @@ public class DownloadJobService {
                 effectivePreferences, alternatives, List.of(), enforceSizePolicy);
     }
 
+    /** Application-layer entry point; the UUID is returned to API clients before processing continues. */
+    public UUID startDownload(UUID jobId, Long chatId, String magnetUrl, long expectedSizeBytes,
+            DownloadTarget downloadTarget, String preferredTorrentName, DownloadPreferences preferences,
+            List<TorrentSearchResult> alternatives) {
+        DownloadPreferences effectivePreferences = preferences == null ? preferencesRepository.find(chatId) : preferences;
+        createAndStart(jobId, chatId, magnetUrl, expectedSizeBytes, downloadTarget, preferredTorrentName,
+                effectivePreferences, alternatives == null ? List.of() : alternatives, List.of(), preferences != null);
+        return jobId;
+    }
+
     public void startReplacement(UUID replacementJobId, DownloadJob source, DownloadAlternative selected,
                                  List<DownloadAlternative> remainingAlternatives) {
         DownloadPreferences snapshot = new DownloadPreferences(0, Long.MAX_VALUE, 1, source.getDownloadTarget(),
