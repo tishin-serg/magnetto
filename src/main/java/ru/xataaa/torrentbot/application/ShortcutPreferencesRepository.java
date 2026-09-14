@@ -1,6 +1,7 @@
 package ru.xataaa.torrentbot.application;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -10,8 +11,19 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class ShortcutPreferencesRepository {
     private final JdbcTemplate jdbc;
-    public void ensureUser(UUID userId, Long telegramChatId) {
-        jdbc.update("insert into app_user(id,telegram_chat_id) values(?,?) on conflict(id) do update set telegram_chat_id=coalesce(app_user.telegram_chat_id, excluded.telegram_chat_id)", userId, telegramChatId);
+    public UUID ensureUser(UUID userId, Long telegramChatId) {
+        if (telegramChatId != null) {
+            Optional<UUID> migratedUser = findByTelegramChatId(telegramChatId);
+            if (migratedUser.isPresent()) {
+                return migratedUser.get();
+            }
+        }
+        jdbc.update("insert into app_user(id,telegram_chat_id) values(?,?) on conflict do nothing", userId, telegramChatId);
+        return telegramChatId == null ? userId : findByTelegramChatId(telegramChatId).orElse(userId);
+    }
+    private Optional<UUID> findByTelegramChatId(Long telegramChatId) {
+        return jdbc.query("select id from app_user where telegram_chat_id=?", (rs,n) -> rs.getObject(1, UUID.class), telegramChatId)
+                .stream().findFirst();
     }
     public ShortcutPreferences find(UUID userId) {
         return jdbc.query("select min_bytes,max_bytes,min_seeders,quality,voice,min_speed_bps,auto_replace_slow_download from shortcut_preferences where user_id=?", (rs,n) -> new ShortcutPreferences(rs.getLong(1),rs.getLong(2),rs.getInt(3),rs.getString(4),rs.getString(5),rs.getLong(6),rs.getBoolean(7)), userId).stream().findFirst().orElseGet(ShortcutPreferences::defaults);

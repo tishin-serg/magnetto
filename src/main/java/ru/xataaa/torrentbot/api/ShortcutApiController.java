@@ -41,12 +41,12 @@ public class ShortcutApiController {
     public ResponseEntity<?> create(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @RequestHeader(value = "Idempotency-Key", required = false) String key, @RequestBody CreateRequest request) {
         if (key == null || key.isBlank()) throw new ApiException(HttpStatus.BAD_REQUEST, "Idempotency-Key is required");
         authenticate(auth); checkCreationRate();
-        UUID known = idempotency.find(properties.userId(), key).orElse(null); if (known != null) return ResponseEntity.accepted().body(new JobAccepted(known));
+        UUID userId = apiUserId();
+        UUID known = idempotency.find(userId, key).orElse(null); if (known != null) return ResponseEntity.accepted().body(new JobAccepted(known));
         DeliveryTarget target = request.deliveryTarget() == null ? DeliveryTarget.PHONE_VPS_TEMP : request.deliveryTarget();
-        preferencesRepository.ensureUser(properties.userId(), properties.telegramChatId());
-        UUID id = application.create(properties.userId(), properties.telegramChatId() == null ? 0L : properties.telegramChatId(), request.movieSelectionId(), request.torrentSelectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice(), target, request.automatic(), preferencesRepository.find(properties.userId()));
-        if (!idempotency.saveIfAbsent(properties.userId(), key, id)) {
-            return ResponseEntity.accepted().body(new JobAccepted(idempotency.find(properties.userId(), key).orElse(id)));
+        UUID id = application.create(userId, properties.telegramChatId() == null ? 0L : properties.telegramChatId(), request.movieSelectionId(), request.torrentSelectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice(), target, request.automatic(), preferencesRepository.find(userId));
+        if (!idempotency.saveIfAbsent(userId, key, id)) {
+            return ResponseEntity.accepted().body(new JobAccepted(idempotency.find(userId, key).orElse(id)));
         }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new JobAccepted(id));
     }
@@ -57,9 +57,10 @@ public class ShortcutApiController {
     @PostMapping("/downloads/{id}/pause") public ResponseEntity<?> pause(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.pause(j); return ResponseEntity.accepted().build(); }
     @PostMapping("/downloads/{id}/resume") public ResponseEntity<?> resume(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.resume(j); return ResponseEntity.accepted().build(); }
     @PutMapping("/downloads/{id}/files") public ResponseEntity<?> files(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id,@RequestBody FileSelection body){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.select(j,body.fileIds()); return ResponseEntity.accepted().build(); }
-    @GetMapping("/preferences") public ShortcutPreferences preferences(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a){ authenticate(a); return preferencesRepository.find(properties.userId()); }
-    @PutMapping("/preferences") public ShortcutPreferences savePreferences(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@RequestBody ShortcutPreferences p){ authenticate(a); preferencesRepository.save(properties.userId(),p); return p; }
+    @GetMapping("/preferences") public ShortcutPreferences preferences(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a){ authenticate(a); return preferencesRepository.find(apiUserId()); }
+    @PutMapping("/preferences") public ShortcutPreferences savePreferences(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@RequestBody ShortcutPreferences p){ authenticate(a); preferencesRepository.save(apiUserId(),p); return p; }
 
+    private UUID apiUserId(){ return preferencesRepository.ensureUser(properties.userId(), properties.telegramChatId()); }
     private DownloadJob owned(UUID id){ return query.owned(id,chat()); }
     private Long chat(){ return properties.telegramChatId()==null?0L:properties.telegramChatId(); }
     private void authenticate(String value){ if(value==null||!value.startsWith("Bearer ")||properties.tokenSha256()==null) throw new ApiException(HttpStatus.UNAUTHORIZED,"Unauthorized"); String got=sha256(value.substring(7).trim()), expected=properties.tokenSha256().trim().toLowerCase(Locale.ROOT); if(!MessageDigest.isEqual(got.getBytes(StandardCharsets.US_ASCII),expected.getBytes(StandardCharsets.US_ASCII))) throw new ApiException(HttpStatus.UNAUTHORIZED,"Unauthorized"); checkRate(); }
