@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#171124">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Magnetto">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'self'">
+    <title>Magnetto</title>
+    <link rel="manifest" href="/iphone/manifest.webmanifest">
+    <link rel="icon" href="/iphone/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/iphone/icon.svg">
+    <link rel="stylesheet" href="/iphone/styles.css">
+</head>
+<body>
+<main class="shell">
+    <header>
+        <div class="logo">M</div>
+        <div><h1>Magnetto</h1><p id="subtitle">Загрузки с iPhone</p></div>
+        <button id="logout" class="icon-button hidden" aria-label="Сменить токен">↪</button>
+    </header>
+
+    <section id="auth-view" class="panel hidden">
+        <h2>Подключение</h2>
+        <p class="muted">Введите API-токен Magnetto. Он сохранится только на этом iPhone.</p>
+        <label>API-токен<input id="token" type="password" autocomplete="off" autocapitalize="none"></label>
+        <button id="save-token" class="primary">Подключить</button>
+    </section>
+
+    <section id="app-view" class="hidden">
+        <nav>
+            <button data-tab="new" class="active">Новая</button>
+            <button data-tab="jobs">Загрузки</button>
+            <button data-tab="preferences">Настройки</button>
+        </nav>
+
+        <section id="tab-new" class="tab panel">
+            <label>Что скачать?
+                <div class="inline"><input id="query" type="search" placeholder="Название фильма или сериала"><button id="search" class="primary">Найти</button></div>
+            </label>
+            <label>Куда
+                <select id="target">
+                    <option value="HOME_LIBRARY">Домашний ПК</option>
+                    <option value="S3_LIBRARY">Постоянный S3</option>
+                    <option value="PHONE_VPS_TEMP">Телефон → VPS, 24 часа</option>
+                    <option value="PHONE_S3_TEMP">Телефон → S3, 24 часа</option>
+                </select>
+            </label>
+            <div id="catalog" class="cards"></div>
+
+            <div id="selection" class="hidden">
+                <div id="selected-title" class="selected"></div>
+                <div id="series-fields" class="grid hidden">
+                    <label>Сезон<input id="season" type="number" min="1" value="1"></label>
+                    <label>Серии<input id="episodes" type="text" placeholder="1,2,3"></label>
+                </div>
+                <div class="segmented">
+                    <button id="auto-mode" class="active">Автоматически</button>
+                    <button id="manual-mode">Вручную</button>
+                </div>
+                <button id="create-auto" class="primary full">Создать загрузку</button>
+                <button id="search-torrents" class="primary full hidden">Найти раздачи</button>
+                <div id="torrents" class="cards"></div>
+            </div>
+        </section>
+
+        <section id="tab-jobs" class="tab panel hidden">
+            <div class="section-head"><h2>Мои загрузки</h2><button id="refresh-jobs">Обновить</button></div>
+            <div id="jobs" class="cards"></div>
+        </section>
+
+        <section id="tab-preferences" class="tab panel hidden">
+            <h2>Профиль iPhone</h2>
+            <div class="grid">
+                <label>Качество<select id="quality"><option value="any">Любое</option><option value="2160p">2160p / 4K</option><option value="1080p">1080p</option><option value="720p">720p</option><option value="webdl">WEB-DL</option><option value="bluray">BluRay / BDRip</option></select></label>
+                <label>Озвучка<select id="voice"><option value="any">Любая</option><option value="dubbed">Дубляж</option><option value="professional">Профессиональная</option><option value="lostfilm">LostFilm</option><option value="hdrezka">HDRezka</option><option value="newstudio">NewStudio</option><option value="original">Оригинал</option></select></label>
+                <label>Мин. размер, ГБ<input id="min-gib" type="number" min="0" step="0.1"></label>
+                <label>Макс. размер, ГБ<input id="max-gib" type="number" min="0" step="0.1" placeholder="Пусто — без ограничения"></label>
+                <label>Минимум сидов<input id="min-seeders" type="number" min="0"></label>
+                <label>Мин. скорость, КБ/с<input id="min-speed" type="number" min="0"></label>
+            </div>
+            <label class="check"><input id="auto-replace" type="checkbox"> Автозамена медленной раздачи</label>
+            <button id="save-preferences" class="primary full">Сохранить</button>
+        </section>
+    </section>
+
+    <div id="busy" class="busy hidden"><span></span></div>
+    <div id="toast" class="toast hidden"></div>
+</main>
+<script src="/iphone/app.js" defer></script>
+</body>
+</html>
