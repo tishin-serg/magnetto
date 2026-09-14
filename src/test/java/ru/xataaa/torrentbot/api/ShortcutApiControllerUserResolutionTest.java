@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -14,6 +15,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
+import reactor.core.scheduler.Schedulers;
 import ru.xataaa.torrentbot.application.ApiIdempotencyRepository;
 import ru.xataaa.torrentbot.application.DeliveryTarget;
 import ru.xataaa.torrentbot.application.DownloadApplicationService;
@@ -44,12 +46,15 @@ class ShortcutApiControllerUserResolutionTest {
         when(preferences.find(migratedUserId)).thenReturn(profile);
         when(application.create(eq(migratedUserId), eq(telegramChatId), eq("movie-selection"), eq(null),
                 eq(null), eq(Set.of()), eq(null), eq(null), eq(DeliveryTarget.HOME_LIBRARY), eq(true), eq(profile)))
-                .thenReturn(jobId);
+                .thenAnswer(invocation -> {
+                    assertFalse(Schedulers.isInNonBlockingThread());
+                    return jobId;
+                });
         when(idempotency.saveIfAbsent(migratedUserId, "request-1", jobId)).thenReturn(true);
 
         ResponseEntity<?> response = controller.create("Bearer test-token", "request-1",
                 new ShortcutApiController.CreateRequest("movie-selection", null, null, Set.of(), null, null,
-                        DeliveryTarget.HOME_LIBRARY, true));
+                        DeliveryTarget.HOME_LIBRARY, true)).block();
 
         assertEquals(202, response.getStatusCode().value());
         verify(application).create(eq(migratedUserId), eq(telegramChatId), eq("movie-selection"), eq(null),

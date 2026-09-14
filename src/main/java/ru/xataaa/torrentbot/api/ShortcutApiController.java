@@ -5,10 +5,13 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.xataaa.torrentbot.application.*;
 import ru.xataaa.torrentbot.config.ShortcutApiProperties;
 import ru.xataaa.torrentbot.file.DownloadFile;
@@ -30,17 +33,20 @@ public class ShortcutApiController {
     private final Map<String, Window> windows = new ConcurrentHashMap<>();
 
     @PostMapping("/catalog/search")
-    public List<CatalogItem> catalog(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @RequestBody CatalogRequest request) {
-        authenticate(auth); return application.searchCatalog(request.query()).stream().map(CatalogItem::from).toList();
+    public Mono<List<CatalogItem>> catalog(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @RequestBody CatalogRequest request) {
+        authenticate(auth); return blocking(() -> application.searchCatalog(request.query()).stream().map(CatalogItem::from).toList());
     }
     @PostMapping("/torrents/search")
-    public List<TorrentItem> torrents(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @RequestBody TorrentRequest request) {
-        authenticate(auth); return application.searchTorrents(request.selectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice()).stream().map(TorrentItem::from).toList();
+    public Mono<List<TorrentItem>> torrents(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @RequestBody TorrentRequest request) {
+        authenticate(auth); return blocking(() -> application.searchTorrents(request.selectionId(), request.season(), safe(request.episodes()), request.quality(), request.voice()).stream().map(TorrentItem::from).toList());
     }
     @PostMapping("/downloads")
-    public ResponseEntity<?> create(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @RequestHeader(value = "Idempotency-Key", required = false) String key, @RequestBody CreateRequest request) {
+    public Mono<ResponseEntity<?>> create(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @RequestHeader(value = "Idempotency-Key", required = false) String key, @RequestBody CreateRequest request) {
         if (key == null || key.isBlank()) throw new ApiException(HttpStatus.BAD_REQUEST, "Idempotency-Key is required");
         authenticate(auth); checkCreationRate();
+        return blocking(() -> createDownload(key, request));
+    }
+    private ResponseEntity<?> createDownload(String key, CreateRequest request) {
         UUID userId = apiUserId();
         UUID known = idempotency.find(userId, key).orElse(null); if (known != null) return ResponseEntity.accepted().body(new JobAccepted(known));
         DeliveryTarget target = request.deliveryTarget() == null ? DeliveryTarget.PHONE_VPS_TEMP : request.deliveryTarget();
@@ -51,15 +57,16 @@ public class ShortcutApiController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new JobAccepted(id));
     }
     @GetMapping("/downloads")
-    public List<JobView> list(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth) { authenticate(auth); return query.recent(chat(), 50).stream().map(j -> view(j, query.files(j.getId()), query.readyLinks(j))).toList(); }
+    public Mono<List<JobView>> list(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth) { authenticate(auth); return blocking(() -> query.recent(chat(), 50).stream().map(j -> view(j, query.files(j.getId()), query.readyLinks(j))).toList()); }
     @GetMapping("/downloads/{id}")
-    public ResponseEntity<?> get(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @PathVariable UUID id) { authenticate(auth); DownloadJob j = query.owned(id, chat()); return j == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(view(j, query.files(id), query.readyLinks(j))); }
-    @PostMapping("/downloads/{id}/pause") public ResponseEntity<?> pause(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.pause(j); return ResponseEntity.accepted().build(); }
-    @PostMapping("/downloads/{id}/resume") public ResponseEntity<?> resume(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.resume(j); return ResponseEntity.accepted().build(); }
-    @PutMapping("/downloads/{id}/files") public ResponseEntity<?> files(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id,@RequestBody FileSelection body){ authenticate(a); DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.select(j,body.fileIds()); return ResponseEntity.accepted().build(); }
-    @GetMapping("/preferences") public ShortcutPreferences preferences(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a){ authenticate(a); return preferencesRepository.find(apiUserId()); }
-    @PutMapping("/preferences") public ShortcutPreferences savePreferences(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@RequestBody ShortcutPreferences p){ authenticate(a); preferencesRepository.save(apiUserId(),p); return p; }
+    public Mono<ResponseEntity<?>> get(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String auth, @PathVariable UUID id) { authenticate(auth); return blocking(() -> { DownloadJob j = query.owned(id, chat()); return j == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(view(j, query.files(id), query.readyLinks(j))); }); }
+    @PostMapping("/downloads/{id}/pause") public Mono<ResponseEntity<?>> pause(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id){ authenticate(a); return blocking(() -> { DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.pause(j); return ResponseEntity.accepted().build(); }); }
+    @PostMapping("/downloads/{id}/resume") public Mono<ResponseEntity<?>> resume(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id){ authenticate(a); return blocking(() -> { DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.resume(j); return ResponseEntity.accepted().build(); }); }
+    @PutMapping("/downloads/{id}/files") public Mono<ResponseEntity<?>> files(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@PathVariable UUID id,@RequestBody FileSelection body){ authenticate(a); return blocking(() -> { DownloadJob j=owned(id); if(j==null)return ResponseEntity.notFound().build(); control.select(j,body.fileIds()); return ResponseEntity.accepted().build(); }); }
+    @GetMapping("/preferences") public Mono<ShortcutPreferences> preferences(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a){ authenticate(a); return blocking(() -> preferencesRepository.find(apiUserId())); }
+    @PutMapping("/preferences") public Mono<ShortcutPreferences> savePreferences(@RequestHeader(value=HttpHeaders.AUTHORIZATION,required=false) String a,@RequestBody ShortcutPreferences p){ authenticate(a); return blocking(() -> { preferencesRepository.save(apiUserId(),p); return p; }); }
 
+    private <T> Mono<T> blocking(Supplier<T> supplier){ return Mono.fromCallable(supplier::get).subscribeOn(Schedulers.boundedElastic()); }
     private UUID apiUserId(){ return preferencesRepository.ensureUser(properties.userId(), properties.telegramChatId()); }
     private DownloadJob owned(UUID id){ return query.owned(id,chat()); }
     private Long chat(){ return properties.telegramChatId()==null?0L:properties.telegramChatId(); }
