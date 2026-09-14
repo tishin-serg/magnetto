@@ -307,4 +307,48 @@
                 ON download_speed_monitor(next_check_at) WHERE stopped_at IS NULL;
         </sql>
     </changeSet>
+
+    <changeSet id="012-application-users-and-shortcut" author="codex">
+        <sql>
+            CREATE TABLE app_user (
+                id UUID PRIMARY KEY,
+                telegram_chat_id BIGINT UNIQUE,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO app_user(id, telegram_chat_id)
+                SELECT md5(chat_id::text)::uuid, chat_id FROM download_job GROUP BY chat_id;
+            ALTER TABLE download_job ADD COLUMN user_id UUID REFERENCES app_user(id);
+            UPDATE download_job j SET user_id = u.id FROM app_user u WHERE u.telegram_chat_id = j.chat_id;
+            CREATE INDEX idx_download_job_user_id ON download_job(user_id);
+            ALTER TABLE download_job ADD COLUMN execution_target VARCHAR(32) NOT NULL DEFAULT 'VPS';
+            ALTER TABLE download_job ADD COLUMN delivery_target VARCHAR(64) NOT NULL DEFAULT 'TELEGRAM_OR_WEBDAV';
+            ALTER TABLE download_job ADD COLUMN season_number INT;
+            ALTER TABLE download_job ADD COLUMN episode_numbers TEXT;
+            UPDATE download_job SET execution_target = CASE WHEN download_target = 'HOME_PC' THEN 'HOME_PC' ELSE 'VPS' END,
+                delivery_target = CASE WHEN download_target = 'HOME_PC' THEN 'HOME_LIBRARY'
+                    WHEN download_target IN ('S3','S3_LATER') THEN 'S3_LIBRARY' ELSE 'TELEGRAM_OR_WEBDAV' END;
+            CREATE TABLE shortcut_preferences (
+                user_id UUID PRIMARY KEY REFERENCES app_user(id), min_bytes BIGINT NOT NULL,
+                max_bytes BIGINT NOT NULL, min_seeders INT NOT NULL, quality VARCHAR(32) NOT NULL,
+                voice VARCHAR(32) NOT NULL, min_speed_bps BIGINT NOT NULL DEFAULT 0,
+                auto_replace_slow_download BOOLEAN NOT NULL DEFAULT FALSE, updated_at TIMESTAMP NOT NULL
+            );
+            CREATE TABLE temporary_delivery_artifact (
+                id UUID PRIMARY KEY, job_id UUID NOT NULL REFERENCES download_job(id), file_id UUID REFERENCES download_file(id),
+                storage_type VARCHAR(32) NOT NULL, token_or_s3_key TEXT NOT NULL, expires_at TIMESTAMP NOT NULL,
+                cleanup_status VARCHAR(32) NOT NULL DEFAULT 'PENDING', cleaned_at TIMESTAMP
+            );
+            CREATE INDEX idx_temporary_delivery_cleanup ON temporary_delivery_artifact(cleanup_status, expires_at);
+        </sql>
+    </changeSet>
+    <changeSet id="013-api-idempotency" author="codex">
+        <createTable tableName="api_idempotency_key">
+            <column name="user_id" type="uuid"><constraints nullable="false" foreignKeyName="fk_api_idempotency_user" references="app_user(id)"/></column>
+            <column name="idempotency_key" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="job_id" type="uuid"><constraints nullable="false" foreignKeyName="fk_api_idempotency_job" references="download_job(id)"/></column>
+            <column name="created_at" type="timestamp"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="api_idempotency_key" columnNames="user_id,idempotency_key" constraintName="pk_api_idempotency_key"/>
+        <createIndex indexName="idx_api_idempotency_created_at" tableName="api_idempotency_key"><column name="created_at"/></createIndex>
+    </changeSet>
 </databaseChangeLog>

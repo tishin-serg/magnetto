@@ -27,13 +27,15 @@ public class JdbcDownloadJobRepository implements DownloadJobRepository {
         String sql = """
                 insert into download_job (
                     id, chat_id, magnet_url, magnet_url_hash, torrent_hash, torrent_name, status, resume_status,
-                    download_target, target_status, target_error_message,
+                    download_target, execution_target, delivery_target, user_id, season_number, episode_numbers,
+                    target_status, target_error_message,
                     error_code, error_message, retry_count, next_retry_at, delete_after_upload,
                     last_reported_progress_percent, status_message_id, min_download_speed_bps, auto_replace_slow_download,
                     created_at, updated_at, completed_at, failed_at
                 ) values (
                     :id, :chatId, :magnetUrl, :magnetUrlHash, :torrentHash, :torrentName, :status, :resumeStatus,
-                    :downloadTarget, :targetStatus, :targetErrorMessage,
+                    :downloadTarget, :executionTarget, :deliveryTarget, :userId, :seasonNumber, :episodeNumbers,
+                    :targetStatus, :targetErrorMessage,
                     :errorCode, :errorMessage, :retryCount, :nextRetryAt, :deleteAfterUpload,
                     :lastReportedProgressPercent, :statusMessageId, :minDownloadSpeedBps, :autoReplaceSlowDownload,
                     :createdAt, :updatedAt, :completedAt, :failedAt
@@ -266,6 +268,19 @@ public class JdbcDownloadJobRepository implements DownloadJobRepository {
         );
     }
 
+    @Override
+    public void updateApplicationContext(UUID jobId, UUID userId, String executionTarget, String deliveryTarget,
+                                         Integer seasonNumber, String episodeNumbers) {
+        jdbcTemplate.update("""
+                update download_job set user_id=:userId, execution_target=:executionTarget,
+                delivery_target=:deliveryTarget, season_number=:seasonNumber, episode_numbers=:episodeNumbers,
+                updated_at=:now where id=:id
+                """, new MapSqlParameterSource().addValue("id", jobId).addValue("userId", userId)
+                .addValue("executionTarget", executionTarget).addValue("deliveryTarget", deliveryTarget)
+                .addValue("seasonNumber", seasonNumber).addValue("episodeNumbers", episodeNumbers)
+                .addValue("now", LocalDateTime.now()));
+    }
+
     private MapSqlParameterSource toParameters(DownloadJob downloadJob) {
         Map<String, Object> values = new HashMap<>();
         values.put("id", downloadJob.getId());
@@ -277,6 +292,11 @@ public class JdbcDownloadJobRepository implements DownloadJobRepository {
         values.put("status", downloadJob.getStatus().name());
         values.put("resumeStatus", downloadJob.getResumeStatus() == null ? null : downloadJob.getResumeStatus().name());
         values.put("downloadTarget", downloadJob.getDownloadTarget() == null ? DownloadTarget.VPS.name() : downloadJob.getDownloadTarget().name());
+        values.put("executionTarget", downloadJob.getExecutionTarget() == null ? null : downloadJob.getExecutionTarget().name());
+        values.put("deliveryTarget", downloadJob.getDeliveryTarget() == null ? null : downloadJob.getDeliveryTarget().name());
+        values.put("userId", downloadJob.getUserId());
+        values.put("seasonNumber", downloadJob.getSeasonNumber());
+        values.put("episodeNumbers", downloadJob.getEpisodeNumbers());
         values.put("targetStatus", downloadJob.getTargetStatus() == null ? TargetStatus.READY.name() : downloadJob.getTargetStatus().name());
         values.put("targetErrorMessage", downloadJob.getTargetErrorMessage());
         values.put("errorCode", downloadJob.getErrorCode() == null ? null : downloadJob.getErrorCode().name());
@@ -300,6 +320,8 @@ public class JdbcDownloadJobRepository implements DownloadJobRepository {
         String resumeStatusValue = resultSet.getString("resume_status");
         String downloadTargetValue = resultSet.getString("download_target");
         String targetStatusValue = resultSet.getString("target_status");
+        String executionTargetValue = resultSet.getString("execution_target");
+        String deliveryTargetValue = resultSet.getString("delivery_target");
         Long statusMessageId = resultSet.getLong("status_message_id");
         if (resultSet.wasNull()) {
             statusMessageId = null;
@@ -314,6 +336,11 @@ public class JdbcDownloadJobRepository implements DownloadJobRepository {
                 .status(DownloadJobStatus.valueOf(resultSet.getString("status")))
                 .resumeStatus(resumeStatusValue == null ? null : DownloadJobStatus.valueOf(resumeStatusValue))
                 .downloadTarget(DownloadTarget.fromValue(downloadTargetValue))
+                .userId((UUID) resultSet.getObject("user_id"))
+                .executionTarget(executionTargetValue == null ? null : ru.xataaa.torrentbot.application.ExecutionTarget.valueOf(executionTargetValue))
+                .deliveryTarget(deliveryTargetValue == null ? null : ru.xataaa.torrentbot.application.DeliveryTarget.valueOf(deliveryTargetValue))
+                .seasonNumber((Integer) resultSet.getObject("season_number"))
+                .episodeNumbers(resultSet.getString("episode_numbers"))
                 .targetStatus(targetStatusValue == null ? TargetStatus.READY : TargetStatus.valueOf(targetStatusValue))
                 .targetErrorMessage(resultSet.getString("target_error_message"))
                 .errorCode(errorCodeValue == null ? null : ErrorCode.valueOf(errorCodeValue))

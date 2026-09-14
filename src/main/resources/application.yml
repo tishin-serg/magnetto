@@ -104,6 +104,18 @@ app:
   cleanup-timeout-minutes: ${CLEANUP_TIMEOUT_MINUTES:30}
   max-job-age-hours: ${MAX_JOB_AGE_HOURS:48}
 
+shortcut-api:
+  enabled: ${SHORTCUT_API_ENABLED:false}
+  user-id: ${SHORTCUT_API_USER_ID:}
+  telegram-chat-id: ${SHORTCUT_API_TELEGRAM_CHAT_ID:}
+  token-sha256: ${SHORTCUT_API_TOKEN_SHA256:}
+  requests-per-minute: ${SHORTCUT_API_REQUESTS_PER_MINUTE:30}
+  creations-per-minute: ${SHORTCUT_API_CREATIONS_PER_MINUTE:5}
+  public-url: ${SHORTCUT_API_PUBLIC_URL:}
+  temporary-ttl-hours: ${SHORTCUT_API_TEMPORARY_TTL_HOURS:24}
+  temporary-s3-prefix: ${SHORTCUT_API_TEMPORARY_S3_PREFIX:temporary/}
+  temporary-cleanup-interval-ms: ${SHORTCUT_API_TEMPORARY_CLEANUP_INTERVAL_MS:1800000}
+
 retry:
   max-attempts: ${RETRY_MAX_ATTEMPTS:3}
   initial-delay-ms: ${RETRY_INITIAL_DELAY_MS:1000}

@@ -107,6 +107,11 @@ public class DownloadLinkService {
         return downloadLinkRepository.existsActiveByJobId(jobId);
     }
 
+    public Optional<DownloadLink> findActiveLinkForFile(UUID fileId) {
+        return downloadLinkRepository.findActiveByFileId(fileId)
+                .filter(link -> link.getExpiresAt().isAfter(timeProvider.now()));
+    }
+
     public int expireOldLinks() {
         LocalDateTime now = timeProvider.now();
         int expiredCount = 0;

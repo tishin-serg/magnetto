@@ -21,6 +21,8 @@ import ru.xataaa.torrentbot.speed.DownloadAlternative;
 import ru.xataaa.torrentbot.speed.DownloadAlternativeRepository;
 import ru.xataaa.torrentbot.telegram.TelegramMessageService;
 import ru.xataaa.torrentbot.torrentsearch.TorrentSearchResult;
+import ru.xataaa.torrentbot.application.DeliveryTarget;
+import ru.xataaa.torrentbot.application.ExecutionTarget;
 
 @Slf4j
 @Service
@@ -70,6 +72,27 @@ public class DownloadJobService {
                 effectivePreferences, alternatives, List.of(), enforceSizePolicy);
     }
 
+    /** Application-layer entry point; the UUID is returned to API clients before processing continues. */
+    public UUID startDownload(UUID jobId, Long chatId, String magnetUrl, long expectedSizeBytes,
+            DownloadTarget downloadTarget, String preferredTorrentName, DownloadPreferences preferences,
+            List<TorrentSearchResult> alternatives) {
+        DownloadPreferences effectivePreferences = preferences == null ? preferencesRepository.find(chatId) : preferences;
+        createAndStart(jobId, chatId, magnetUrl, expectedSizeBytes, downloadTarget, preferredTorrentName,
+                effectivePreferences, alternatives == null ? List.of() : alternatives, List.of(), preferences != null);
+        return jobId;
+    }
+
+    public UUID startDownload(UUID jobId, Long chatId, String magnetUrl, long expectedSizeBytes,
+            DownloadTarget downloadTarget, String preferredTorrentName, DownloadPreferences preferences,
+            List<TorrentSearchResult> alternatives, UUID userId, ExecutionTarget executionTarget,
+            DeliveryTarget deliveryTarget, Integer seasonNumber, String episodeNumbers) {
+        DownloadPreferences effectivePreferences = preferences == null ? preferencesRepository.find(chatId) : preferences;
+        createAndStart(jobId, chatId, magnetUrl, expectedSizeBytes, downloadTarget, preferredTorrentName,
+                effectivePreferences, alternatives == null ? List.of() : alternatives, List.of(), preferences != null,
+                userId, executionTarget, deliveryTarget, seasonNumber, episodeNumbers);
+        return jobId;
+    }
+
     public void startReplacement(UUID replacementJobId, DownloadJob source, DownloadAlternative selected,
                                  List<DownloadAlternative> remainingAlternatives) {
         DownloadPreferences snapshot = new DownloadPreferences(0, Long.MAX_VALUE, 1, source.getDownloadTarget(),
@@ -82,6 +105,15 @@ public class DownloadJobService {
             DownloadTarget downloadTarget, String preferredTorrentName, DownloadPreferences preferences,
             List<TorrentSearchResult> alternatives, List<DownloadAlternative> savedAlternatives,
             boolean enforceSizePolicy) {
+        createAndStart(jobId, chatId, magnetUrl, expectedSizeBytes, downloadTarget, preferredTorrentName,
+                preferences, alternatives, savedAlternatives, enforceSizePolicy, null, null, null, null, null);
+    }
+
+    private void createAndStart(UUID jobId, Long chatId, String magnetUrl, long expectedSizeBytes,
+            DownloadTarget downloadTarget, String preferredTorrentName, DownloadPreferences preferences,
+            List<TorrentSearchResult> alternatives, List<DownloadAlternative> savedAlternatives,
+            boolean enforceSizePolicy, UUID userId, ExecutionTarget executionTarget, DeliveryTarget deliveryTarget,
+            Integer seasonNumber, String episodeNumbers) {
         if (!appProperties.isChatAllowed(chatId)) {
             telegramMessageService.sendText(chatId, "Доступ запрещён.");
             log.warn("Access denied: chatId={}", chatId);
@@ -102,6 +134,11 @@ public class DownloadJobService {
                 .torrentName(normalizePreferredTorrentName(preferredTorrentName))
                 .status(DownloadJobStatus.CREATED)
                 .downloadTarget(effectiveDownloadTarget)
+                .userId(userId)
+                .executionTarget(executionTarget)
+                .deliveryTarget(deliveryTarget)
+                .seasonNumber(seasonNumber)
+                .episodeNumbers(episodeNumbers)
                 .targetStatus(TargetStatus.READY)
                 .retryCount(0)
                 .deleteAfterUpload(appProperties.deleteAfterSuccessfulUpload())

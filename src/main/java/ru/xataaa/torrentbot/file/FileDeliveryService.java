@@ -43,13 +43,17 @@ public class FileDeliveryService {
     private final MediaLibraryService mediaLibraryService;
 
     public DeliveryResult deliverFiles(UUID jobId, Long chatId) {
+        return deliverFiles(jobId, chatId, false);
+    }
+
+    public DeliveryResult deliverFiles(UUID jobId, Long chatId, boolean forceTemporaryLinks) {
         List<DownloadFile> filesToUpload = downloadFileRepository.findByJobIdAndStatuses(jobId, UPLOADABLE_STATUSES);
         boolean hasRetryableFailure = false;
         boolean hasFinalFailure = false;
 
         for (DownloadFile downloadFile : filesToUpload) {
             try {
-                uploadOneFile(chatId, downloadFile);
+                uploadOneFile(chatId, downloadFile, forceTemporaryLinks);
             } catch (NonRetryableOperationException nonRetryableOperationException) {
                 hasFinalFailure = true;
                 downloadFileRepository.incrementUploadAttempt(
@@ -78,12 +82,16 @@ public class FileDeliveryService {
         return new DeliveryResult(uploadedCount, downloadLinkCount, hasRetryableFailure, hasFinalFailure);
     }
 
-    private void uploadOneFile(Long chatId, DownloadFile downloadFile) {
+    private void uploadOneFile(Long chatId, DownloadFile downloadFile, boolean forceTemporaryLinks) {
         File file = Path.of(qbittorrentProperties.downloadPath(), downloadFile.getRelativePath()).toFile();
         if (!file.exists() || !file.isFile()) {
             throw new NonRetryableOperationException(ErrorCode.FILE_NOT_FOUND, "File not found: " + downloadFile.getFileName());
         }
 
+        if (forceTemporaryLinks) {
+            deliverToTemporaryLink(chatId, downloadFile);
+            return;
+        }
         FileDeliveryMode deliveryMode = fileDeliveryDecisionService.decide(downloadFile.getSizeBytes());
         if (deliveryMode == FileDeliveryMode.WEBDAV_LIBRARY) {
             deliverToWebdavLibrary(chatId, downloadFile, file.toPath());
@@ -119,6 +127,14 @@ public class FileDeliveryService {
             }
             throw runtimeException;
         }
+    }
+
+    private void deliverToTemporaryLink(Long chatId, DownloadFile downloadFile) {
+        DownloadLink downloadLink = downloadLinkService.createDownloadLink(chatId, downloadFile);
+        telegramMessageService.sendTextWithInlineKeyboard(chatId,
+                "Файл готов. Временная ссылка активна " + downloadLinkService.ttlHours() + " часов.",
+                "{\"inline_keyboard\":[[{\"text\":\"Открыть файл\",\"url\":\"" + escapeJson(downloadLinkService.publicUrl(downloadLink)) + "\"}]]}");
+        downloadFileRepository.updateStatus(downloadFile.getId(), DownloadFileStatus.DOWNLOAD_LINK_CREATED);
     }
 
     private void deliverToWebdavLibrary(Long chatId, DownloadFile downloadFile, Path sourcePath) {

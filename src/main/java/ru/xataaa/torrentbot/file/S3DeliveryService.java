@@ -10,6 +10,8 @@ import ru.xataaa.torrentbot.common.ErrorCode;
 import ru.xataaa.torrentbot.common.FileSizeFormatter;
 import ru.xataaa.torrentbot.config.QbittorrentProperties;
 import ru.xataaa.torrentbot.job.DownloadTarget;
+import ru.xataaa.torrentbot.application.TemporaryDeliveryArtifactRepository;
+import ru.xataaa.torrentbot.config.ShortcutApiProperties;
 import ru.xataaa.torrentbot.media.S3MediaLibraryService;
 import ru.xataaa.torrentbot.media.S3UploadResult;
 import ru.xataaa.torrentbot.retry.NonRetryableOperationException;
@@ -33,8 +35,14 @@ public class S3DeliveryService {
     private final S3MediaLibraryService s3MediaLibraryService;
     private final TelegramMessageService telegramMessageService;
     private final FileSizeFormatter fileSizeFormatter;
+    private final ShortcutApiProperties shortcutApiProperties;
+    private final TemporaryDeliveryArtifactRepository artifactRepository;
 
     public DeliveryResult deliverFiles(UUID jobId, Long chatId) {
+        return deliverFiles(jobId, chatId, false);
+    }
+
+    public DeliveryResult deliverFiles(UUID jobId, Long chatId, boolean temporary) {
         List<DownloadFile> files = downloadFileRepository.findByJobIdAndStatuses(jobId, DELIVERABLE_STATUSES);
         int totalCount = files.size();
         boolean hasRetryableFailure = false;
@@ -45,7 +53,7 @@ public class S3DeliveryService {
             try {
                 deliveredCount++;
                 telegramMessageService.sendText(chatId, "Выгружаю в S3: " + deliveredCount + " из " + totalCount);
-                deliverOne(downloadFile);
+                deliverOne(downloadFile, temporary);
             } catch (NonRetryableOperationException exception) {
                 hasFinalFailure = true;
                 downloadFileRepository.incrementUploadAttempt(downloadFile.getId(), DownloadFileStatus.UPLOAD_FAILED_FINAL,
@@ -58,13 +66,13 @@ public class S3DeliveryService {
         }
 
         if (!hasRetryableFailure && !hasFinalFailure) {
-            sendCompletion(chatId, downloadFileRepository.findByJobIdAndStatuses(jobId, List.of(DownloadFileStatus.S3_UPLOADED)));
+            sendCompletion(chatId, downloadFileRepository.findByJobIdAndStatuses(jobId, List.of(DownloadFileStatus.S3_UPLOADED)), temporary);
         }
         int uploadedCount = (int) downloadFileRepository.findByJobIdAndStatuses(jobId, List.of(DownloadFileStatus.S3_UPLOADED)).size();
         return new DeliveryResult(uploadedCount, hasRetryableFailure, hasFinalFailure);
     }
 
-    private void deliverOne(DownloadFile downloadFile) {
+    private void deliverOne(DownloadFile downloadFile, boolean temporary) {
         if (downloadFile.getStatus() == DownloadFileStatus.S3_UPLOADED
                 && downloadFile.getS3ObjectKey() != null
                 && !downloadFile.getS3ObjectKey().isBlank()) {
@@ -75,18 +83,22 @@ public class S3DeliveryService {
             throw new NonRetryableOperationException(ErrorCode.FILE_NOT_FOUND, "File not found: " + downloadFile.getFileName());
         }
         downloadFileRepository.updateStatus(downloadFile.getId(), DownloadFileStatus.UPLOADING_TO_S3);
-        S3UploadResult uploadResult = s3MediaLibraryService.upload(
+        S3UploadResult uploadResult = temporary ? s3MediaLibraryService.uploadTemporary(
+                sourcePath, downloadFile.getFileName(), downloadFile.getS3ObjectKey(), downloadFile.getSizeBytes(), shortcutApiProperties.temporaryS3Prefix())
+                : s3MediaLibraryService.upload(
                 sourcePath,
                 downloadFile.getFileName(),
                 downloadFile.getS3ObjectKey(),
                 downloadFile.getSizeBytes()
         );
         downloadFileRepository.markS3Uploaded(downloadFile.getId(), uploadResult.objectKey());
+        if (temporary) artifactRepository.save(downloadFile.getJobId(), downloadFile.getId(), "S3", uploadResult.objectKey(),
+                java.time.LocalDateTime.now().plusHours(shortcutApiProperties.temporaryTtlHours()));
         log.info("Delivered file to S3: jobId={}, fileName={}, objectKey={}, alreadyExists={}",
                 downloadFile.getJobId(), downloadFile.getFileName(), uploadResult.objectKey(), uploadResult.alreadyExists());
     }
 
-    private void sendCompletion(Long chatId, List<DownloadFile> files) {
+    private void sendCompletion(Long chatId, List<DownloadFile> files, boolean temporary) {
         StringBuilder text = new StringBuilder();
         text.append("Файлы выгружены в S3. Ссылки активны ")
                 .append(s3MediaLibraryService.ttlHours())
@@ -99,7 +111,9 @@ public class S3DeliveryService {
                     .append("\n")
                     .append(fileSizeFormatter.format(file.getSizeBytes()))
                     .append("\n")
-                    .append(s3MediaLibraryService.createPresignedUrl(file.getS3ObjectKey()))
+                    .append(temporary
+                            ? s3MediaLibraryService.createTemporaryPresignedUrl(file.getS3ObjectKey(), shortcutApiProperties.temporaryS3Prefix())
+                            : s3MediaLibraryService.createPresignedUrl(file.getS3ObjectKey()))
                     .append("\n\n");
         }
         telegramMessageService.sendText(chatId, text.toString().trim());
