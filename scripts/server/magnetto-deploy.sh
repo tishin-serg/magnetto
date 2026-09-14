@@ -78,4 +78,7 @@ if [[ "$ready" != "1" ]]; then
   exit 1
 fi
 
+docker compose exec -T nginx nginx -t
+docker compose exec -T nginx nginx -s reload
+
 docker logs --since=2m torrentbot-bot-app-1 2>&1 | tail -200

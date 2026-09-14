@@ -136,4 +136,11 @@ jobs:
           VDS_USER: ${{ secrets.VDS_USER }}
         run: |
           set -euo pipefail
-          ssh -p "${VDS_PORT:-22}" "$VDS_USER@$VDS_HOST" "sudo /usr/local/sbin/magnetto-deploy /tmp/magnetto-source-${GITHUB_SHA}.tar.gz"
+          ssh -p "${VDS_PORT:-22}" "$VDS_USER@$VDS_HOST" "set -euo pipefail; \
+            sudo /usr/local/sbin/magnetto-deploy /tmp/magnetto-source-${GITHUB_SHA}.tar.gz; \
+            cd /opt/torrentbot; \
+            if ! sudo cmp -s scripts/server/magnetto-deploy.sh /usr/local/sbin/magnetto-deploy; then \
+              sudo docker compose exec -T nginx nginx -t; \
+              sudo docker compose exec -T nginx nginx -s reload; \
+              sudo install -m 0755 scripts/server/magnetto-deploy.sh /usr/local/sbin/magnetto-deploy; \
+            fi"

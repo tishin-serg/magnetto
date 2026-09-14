@@ -58,6 +58,8 @@ cd "$RemoteDir"
 docker run --rm -v "${RemoteDir}:/workspace" -w /workspace maven:3.9-eclipse-temurin-21 mvn -B -Dmaven.test.skip=true package
 docker build -f Dockerfile.runtime -t torrentbot-bot-app .
 docker compose up -d --no-deps bot-app
+docker compose exec -T nginx nginx -t
+docker compose exec -T nginx nginx -s reload
 docker compose ps bot-app
 docker exec torrentbot-bot-app-1 sh -c 'wget -qO- http://127.0.0.1:8080/actuator/health || curl -s http://127.0.0.1:8080/actuator/health'
 "@
