@@ -1,9 +1,9 @@
 {
   "name": "Magnetto",
   "short_name": "Magnetto",
-  "start_url": "/iphone/",
+  "start_url": "/api/iphone/",
   "display": "standalone",
   "background_color": "#0d0a13",
   "theme_color": "#171124",
-  "icons": [{"src":"/iphone/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+  "icons": [{"src":"/api/iphone/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
 }

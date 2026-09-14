@@ -18,10 +18,10 @@ class IphoneClientControllerTest {
                 .getAnnotation(GetMapping.class);
 
         assertNotNull(mapping);
-        assertArrayEquals(new String[]{"/iphone", "/iphone/"}, mapping.value());
+        assertArrayEquals(new String[]{"/iphone", "/iphone/", "/api/iphone", "/api/iphone/"}, mapping.value());
         ResponseEntity<Void> response = new IphoneClientController().iphoneClient();
         assertEquals(302, response.getStatusCode().value());
-        assertEquals(URI.create("/iphone/index.html"), response.getHeaders().getLocation());
+        assertEquals(URI.create("/api/iphone/index.html"), response.getHeaders().getLocation());
     }
 
     @Test

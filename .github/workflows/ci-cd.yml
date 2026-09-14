@@ -136,15 +136,4 @@ jobs:
           VDS_USER: ${{ secrets.VDS_USER }}
         run: |
           set -euo pipefail
-          ssh -p "${VDS_PORT:-22}" "$VDS_USER@$VDS_HOST" "bash -s -- '${GITHUB_SHA}'" <<'REMOTE'
-          set -euo pipefail
-          sha="$1"
-          sudo /usr/local/sbin/magnetto-deploy "/tmp/magnetto-source-${sha}.tar.gz"
-          nginx_container="$(docker ps \
-            --filter 'label=com.docker.compose.project=torrentbot' \
-            --filter 'label=com.docker.compose.service=nginx' \
-            --format '{{.ID}}' | head -n 1)"
-          test -n "$nginx_container"
-          docker exec "$nginx_container" nginx -t
-          docker exec "$nginx_container" nginx -s reload
-          REMOTE
+          ssh -p "${VDS_PORT:-22}" "$VDS_USER@$VDS_HOST" "sudo /usr/local/sbin/magnetto-deploy /tmp/magnetto-source-${GITHUB_SHA}.tar.gz"

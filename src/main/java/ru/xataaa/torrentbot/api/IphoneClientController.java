@@ -10,10 +10,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 @ConditionalOnProperty(prefix = "shortcut-api", name = "enabled", havingValue = "true")
 public class IphoneClientController {
 
-    @GetMapping({"/iphone", "/iphone/"})
+    @GetMapping({"/iphone", "/iphone/", "/api/iphone", "/api/iphone/"})
     public ResponseEntity<Void> iphoneClient() {
         return ResponseEntity.status(302)
-                .location(URI.create("/iphone/index.html"))
+                .location(URI.create("/api/iphone/index.html"))
                 .build();
     }
 }
