@@ -625,7 +625,7 @@ SHA-256 токена (`SHORTCUT_API_TOKEN_SHA256`). Основные метод�
 TMDb/JacRed/qBittorrent и Telegram-уведомления, а старые Telegram-настройки не
 изменяет.
 
-В Docker Compose маршрут `/api/` проксируется nginx. HTTPS должен завершаться
-на внешнем reverse proxy перед этим стеком; наружу следует публиковать только
-HTTPS-адрес. `http://localhost:8088` подходит лишь для локального smoke-теста и
-не подходит для Shortcut вне домашней сети.
+В Docker Compose маршруты `/api/` и `/iphone` проксируются nginx. HTTPS должен
+завершаться на внешнем reverse proxy перед этим стеком; наружу следует публиковать
+только HTTPS-адрес. `http://localhost:8088` подходит лишь для локального
+smoke-теста и не подходит для Shortcut вне домашней сети.
